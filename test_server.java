@@ -27,6 +27,7 @@ public class test_server {
 						while (true) {
 							String s = recv();
 							System.out.println(s);
+							//s = s.replaceAll("test", "test");
 							send(s);
 							Thread.sleep(1000);
 						}
