@@ -2,6 +2,7 @@
 #include "mazeCom.hpp"
 
 #include <sstream>
+#include <iostream>
 
 namespace asio = boost::asio;
 using asio::ip::tcp;
@@ -28,27 +29,31 @@ void client::send(const MazeCom& msg)
 	asio::write(socket_, boost::asio::buffer(serializedMsg, msgLength));
 }
 
-string client::recv()
+client::mc_ptr client::recv()
 {
-	char* l = new char[4];
-	asio::read(socket_, asio::buffer(l, 4));
+	char* buf = new char[4];
+	asio::read(socket_, asio::buffer(buf, 4));
 	int length = 0;
-	length = length | l[3];
+	length = length | (buf[3] & 0xff);
 	length = length << 8;
-	length = length | l[2];
+	length = length | (buf[2] & 0xff);
 	length = length << 8;
-	length = length | l[1];
+	length = length | (buf[1] & 0xff);
 	length = length << 8;
-	length = length | l[0];
+	length = length | (buf[0] & 0xff);
 
-	std::vector<char> b;
-	asio::read(socket_, asio::buffer(b, length));
+	delete[] buf;
+	buf = new char[length];
 
-	string s;
-	for (int i = 0; i < b.size(); ++i)
+	asio::read(socket_, asio::buffer(buf, length));
+
+	stringstream ss;
+	for (int i = 0; i < length; ++i)
 	{
-		s += b[i];
+		ss << buf[i];
 	}
-	return s;
 
+	delete[] buf;
+
+	return MazeCom_(ss, xml_schema::flags::dont_validate);
 }

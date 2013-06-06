@@ -35,6 +35,7 @@ int main(int argc, char** argv)
 
 	c.send(m);
 
-	string s = c.recv();
-	cout << s << endl;
+	client::mc_ptr r(c.recv());
+	cout << *r << endl;
+	MazeCom_(cout, *r);
 }

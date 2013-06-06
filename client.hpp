@@ -15,6 +15,7 @@ using boost::asio::ip::tcp;
 
 class client 
 {
+	
 	io_service io_service_;
 	tcp::socket socket_;
 
@@ -22,10 +23,11 @@ class client
 	client& operator=(const client&);
 
 public:
+	typedef std::auto_ptr<MazeCom> mc_ptr;
+
 	client(const string& ip, const string& port);
 	void send(const MazeCom& msg);
-	string recv();
-
+	mc_ptr recv();
 };
 
 
