@@ -9,6 +9,6 @@ set(BOOST_DIR "D:/boost/boost_1_53_0" CACHE PATH "path to boost (including syste
 include_directories(${BOOST_DIR})
 link_directories(${BOOST_DIR}/lib)
 
-add_executable(mazenet-client main.cpp client.hpp client.cpp mazeCom.hpp mazeCom.cpp)
+add_executable(mazenet-client main.cpp client.hpp client.cpp mazeCom_.hpp mazeCom.hpp mazeCom.cpp)
 target_link_libraries(mazenet-client debug xerces-c_3D.lib)
 target_link_libraries(mazenet-client optimized xerces-c_3.lib)

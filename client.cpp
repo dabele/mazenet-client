@@ -1,5 +1,4 @@
 #include "client.hpp"
-#include "mazeCom.hpp"
 
 #include <sstream>
 #include <iostream>
@@ -29,7 +28,7 @@ void client::send(const MazeCom& msg)
 	asio::write(socket_, boost::asio::buffer(serializedMsg, msgLength));
 }
 
-client::mc_ptr client::recv()
+MazeCom_Ptr client::recv(MazeComType type)
 {
 	char* buf = new char[4];
 	asio::read(socket_, asio::buffer(buf, 4));
@@ -54,6 +53,44 @@ client::mc_ptr client::recv()
 	}
 
 	delete[] buf;
+	
+	string dbg(ss.str());
 
-	return MazeCom_(ss, xml_schema::flags::dont_validate);
+	MazeCom_Ptr msg(MazeCom_(ss, xml_schema::flags::dont_validate));
+
+	if (msg->mcType() == type)
+	{
+		return msg;
+	} 
+	else
+	{
+		throw msg;
+	}
+}
+
+void client::login(string& name)
+{
+	//send login
+	MazeCom loginMsg(MazeComType::LOGIN, 0);
+	loginMsg.LoginMessage(LoginMessageType(name));
+	send(loginMsg);
+
+	//wait for reply
+	MazeCom_Ptr r(client::recv(MazeComType::LOGINREPLY));
+	id_ = r->id();
+}
+
+void client::play()
+{
+	MazeCom_Ptr moveRequest(recv(MazeComType::AWAITMOVE));
+	
+	//calculate move
+	//TODO algorithm
+	//just make any move to check communication
+	std::cout << *moveRequest << std::endl;
+	return;
+
+
+	//send move
+	MazeCom moveMsg(MazeComType::MOVE, id_);
 }

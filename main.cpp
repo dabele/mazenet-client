@@ -1,13 +1,12 @@
 #include <string>
 #include <iostream>
-#include <sstream>
 
-#include "mazeCom.hpp"
 #include "boost/asio.hpp"
+
+#include "mazeCom_.hpp"
 #include "client.hpp"
 
 using std::string;
-using std::stringstream;
 using std::cout;
 using std::endl;
 
@@ -24,18 +23,19 @@ int main(int argc, char** argv)
 	{
 		//debug
 		host = "localhost";
-		port = "5000";
+		port = "5123";
 	}
 
-	client c(host, port);
+	/*client c(host, port);
+	c.login(string("c"));
 
-	MazeCom m(MazeComType::LOGIN, 1);
-	m.LoginMessage(LoginMessageType("test"));
-	//MazeCom_(cout, m);
+	client d(host, port);
+	d.login(string("d"));*/
 
-	c.send(m);
+	MazeCom m(MazeComType::AWAITMOVE, 1);
+	positionType forbidden(1, 2);
+	cardType(
 
-	client::mc_ptr r(c.recv());
-	cout << *r << endl;
-	MazeCom_(cout, *r);
+	c.play();
+
 }

@@ -258,6 +258,7 @@ class positionType;
 class LoginMessageType;
 class LoginReplyMessageType;
 class AwaitMoveMessageType;
+class TreasuresToGoType;
 class MoveMessageType;
 class AcceptMessageType;
 class WinMessageType;
@@ -614,30 +615,30 @@ class boardType: public ::xml_schema::type
   void
   shiftCard (::std::auto_ptr< shiftCard_type > p);
 
-  // treasure
+  // forbidden
   // 
-  typedef ::treasureType treasure_type;
-  typedef ::xsd::cxx::tree::traits< treasure_type, char > treasure_traits;
+  typedef ::positionType forbidden_type;
+  typedef ::xsd::cxx::tree::traits< forbidden_type, char > forbidden_traits;
 
-  const treasure_type&
-  treasure () const;
+  const forbidden_type&
+  forbidden () const;
 
-  treasure_type&
-  treasure ();
-
-  void
-  treasure (const treasure_type& x);
+  forbidden_type&
+  forbidden ();
 
   void
-  treasure (::std::auto_ptr< treasure_type > p);
+  forbidden (const forbidden_type& x);
+
+  void
+  forbidden (::std::auto_ptr< forbidden_type > p);
 
   // Constructors.
   //
   boardType (const shiftCard_type&,
-             const treasure_type&);
+             const forbidden_type&);
 
   boardType (::std::auto_ptr< shiftCard_type >&,
-             const treasure_type&);
+             ::std::auto_ptr< forbidden_type >&);
 
   boardType (const ::xercesc::DOMElement& e,
              ::xml_schema::flags f = 0,
@@ -664,7 +665,7 @@ class boardType: public ::xml_schema::type
   protected:
   row_sequence row_;
   ::xsd::cxx::tree::one< shiftCard_type > shiftCard_;
-  ::xsd::cxx::tree::one< treasure_type > treasure_;
+  ::xsd::cxx::tree::one< forbidden_type > forbidden_;
 };
 
 class positionType: public ::xml_schema::type
@@ -847,11 +848,47 @@ class AwaitMoveMessageType: public ::xml_schema::type
   void
   board (::std::auto_ptr< board_type > p);
 
+  // treausresToGo
+  // 
+  typedef ::TreasuresToGoType treausresToGo_type;
+  typedef ::xsd::cxx::tree::sequence< treausresToGo_type > treausresToGo_sequence;
+  typedef treausresToGo_sequence::iterator treausresToGo_iterator;
+  typedef treausresToGo_sequence::const_iterator treausresToGo_const_iterator;
+  typedef ::xsd::cxx::tree::traits< treausresToGo_type, char > treausresToGo_traits;
+
+  const treausresToGo_sequence&
+  treausresToGo () const;
+
+  treausresToGo_sequence&
+  treausresToGo ();
+
+  void
+  treausresToGo (const treausresToGo_sequence& s);
+
+  // treasure
+  // 
+  typedef ::treasureType treasure_type;
+  typedef ::xsd::cxx::tree::traits< treasure_type, char > treasure_traits;
+
+  const treasure_type&
+  treasure () const;
+
+  treasure_type&
+  treasure ();
+
+  void
+  treasure (const treasure_type& x);
+
+  void
+  treasure (::std::auto_ptr< treasure_type > p);
+
   // Constructors.
   //
-  AwaitMoveMessageType (const board_type&);
+  AwaitMoveMessageType (const board_type&,
+                        const treasure_type&);
 
-  AwaitMoveMessageType (::std::auto_ptr< board_type >&);
+  AwaitMoveMessageType (::std::auto_ptr< board_type >&,
+                        const treasure_type&);
 
   AwaitMoveMessageType (const ::xercesc::DOMElement& e,
                         ::xml_schema::flags f = 0,
@@ -877,6 +914,71 @@ class AwaitMoveMessageType: public ::xml_schema::type
 
   protected:
   ::xsd::cxx::tree::one< board_type > board_;
+  treausresToGo_sequence treausresToGo_;
+  ::xsd::cxx::tree::one< treasure_type > treasure_;
+};
+
+class TreasuresToGoType: public ::xml_schema::type
+{
+  public:
+  // player
+  // 
+  typedef ::xml_schema::int_ player_type;
+  typedef ::xsd::cxx::tree::traits< player_type, char > player_traits;
+
+  const player_type&
+  player () const;
+
+  player_type&
+  player ();
+
+  void
+  player (const player_type& x);
+
+  // treausres
+  // 
+  typedef ::xml_schema::int_ treausres_type;
+  typedef ::xsd::cxx::tree::traits< treausres_type, char > treausres_traits;
+
+  const treausres_type&
+  treausres () const;
+
+  treausres_type&
+  treausres ();
+
+  void
+  treausres (const treausres_type& x);
+
+  // Constructors.
+  //
+  TreasuresToGoType (const player_type&,
+                     const treausres_type&);
+
+  TreasuresToGoType (const ::xercesc::DOMElement& e,
+                     ::xml_schema::flags f = 0,
+                     ::xml_schema::container* c = 0);
+
+  TreasuresToGoType (const TreasuresToGoType& x,
+                     ::xml_schema::flags f = 0,
+                     ::xml_schema::container* c = 0);
+
+  virtual TreasuresToGoType*
+  _clone (::xml_schema::flags f = 0,
+          ::xml_schema::container* c = 0) const;
+
+  virtual 
+  ~TreasuresToGoType ();
+
+  // Implementation.
+  //
+  protected:
+  void
+  parse (::xsd::cxx::xml::dom::parser< char >&,
+         ::xml_schema::flags);
+
+  protected:
+  ::xsd::cxx::tree::one< player_type > player_;
+  ::xsd::cxx::tree::one< treausres_type > treausres_;
 };
 
 class MoveMessageType: public ::xml_schema::type
@@ -1688,6 +1790,9 @@ operator<< (::std::ostream&, const LoginReplyMessageType&);
 operator<< (::std::ostream&, const AwaitMoveMessageType&);
 
 ::std::ostream&
+operator<< (::std::ostream&, const TreasuresToGoType&);
+
+::std::ostream&
 operator<< (::std::ostream&, const MoveMessageType&);
 
 ::std::ostream&
@@ -1936,6 +2041,9 @@ operator<< (::xercesc::DOMElement&, const LoginReplyMessageType&);
 
 void
 operator<< (::xercesc::DOMElement&, const AwaitMoveMessageType&);
+
+void
+operator<< (::xercesc::DOMElement&, const TreasuresToGoType&);
 
 void
 operator<< (::xercesc::DOMElement&, const MoveMessageType&);

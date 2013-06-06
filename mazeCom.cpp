@@ -296,28 +296,28 @@ shiftCard (::std::auto_ptr< shiftCard_type > x)
   this->shiftCard_.set (x);
 }
 
-const boardType::treasure_type& boardType::
-treasure () const
+const boardType::forbidden_type& boardType::
+forbidden () const
 {
-  return this->treasure_.get ();
+  return this->forbidden_.get ();
 }
 
-boardType::treasure_type& boardType::
-treasure ()
+boardType::forbidden_type& boardType::
+forbidden ()
 {
-  return this->treasure_.get ();
-}
-
-void boardType::
-treasure (const treasure_type& x)
-{
-  this->treasure_.set (x);
+  return this->forbidden_.get ();
 }
 
 void boardType::
-treasure (::std::auto_ptr< treasure_type > x)
+forbidden (const forbidden_type& x)
 {
-  this->treasure_.set (x);
+  this->forbidden_.set (x);
+}
+
+void boardType::
+forbidden (::std::auto_ptr< forbidden_type > x)
+{
+  this->forbidden_.set (x);
 }
 
 
@@ -436,6 +436,88 @@ void AwaitMoveMessageType::
 board (::std::auto_ptr< board_type > x)
 {
   this->board_.set (x);
+}
+
+const AwaitMoveMessageType::treausresToGo_sequence& AwaitMoveMessageType::
+treausresToGo () const
+{
+  return this->treausresToGo_;
+}
+
+AwaitMoveMessageType::treausresToGo_sequence& AwaitMoveMessageType::
+treausresToGo ()
+{
+  return this->treausresToGo_;
+}
+
+void AwaitMoveMessageType::
+treausresToGo (const treausresToGo_sequence& s)
+{
+  this->treausresToGo_ = s;
+}
+
+const AwaitMoveMessageType::treasure_type& AwaitMoveMessageType::
+treasure () const
+{
+  return this->treasure_.get ();
+}
+
+AwaitMoveMessageType::treasure_type& AwaitMoveMessageType::
+treasure ()
+{
+  return this->treasure_.get ();
+}
+
+void AwaitMoveMessageType::
+treasure (const treasure_type& x)
+{
+  this->treasure_.set (x);
+}
+
+void AwaitMoveMessageType::
+treasure (::std::auto_ptr< treasure_type > x)
+{
+  this->treasure_.set (x);
+}
+
+
+// TreasuresToGoType
+// 
+
+const TreasuresToGoType::player_type& TreasuresToGoType::
+player () const
+{
+  return this->player_.get ();
+}
+
+TreasuresToGoType::player_type& TreasuresToGoType::
+player ()
+{
+  return this->player_.get ();
+}
+
+void TreasuresToGoType::
+player (const player_type& x)
+{
+  this->player_.set (x);
+}
+
+const TreasuresToGoType::treausres_type& TreasuresToGoType::
+treausres () const
+{
+  return this->treausres_.get ();
+}
+
+TreasuresToGoType::treausres_type& TreasuresToGoType::
+treausres ()
+{
+  return this->treausres_.get ();
+}
+
+void TreasuresToGoType::
+treausres (const treausres_type& x)
+{
+  this->treausres_.set (x);
 }
 
 
@@ -1493,21 +1575,21 @@ cardType::
 
 boardType::
 boardType (const shiftCard_type& shiftCard,
-           const treasure_type& treasure)
+           const forbidden_type& forbidden)
 : ::xml_schema::type (),
   row_ (::xml_schema::flags (), this),
   shiftCard_ (shiftCard, ::xml_schema::flags (), this),
-  treasure_ (treasure, ::xml_schema::flags (), this)
+  forbidden_ (forbidden, ::xml_schema::flags (), this)
 {
 }
 
 boardType::
 boardType (::std::auto_ptr< shiftCard_type >& shiftCard,
-           const treasure_type& treasure)
+           ::std::auto_ptr< forbidden_type >& forbidden)
 : ::xml_schema::type (),
   row_ (::xml_schema::flags (), this),
   shiftCard_ (shiftCard, ::xml_schema::flags (), this),
-  treasure_ (treasure, ::xml_schema::flags (), this)
+  forbidden_ (forbidden, ::xml_schema::flags (), this)
 {
 }
 
@@ -1518,7 +1600,7 @@ boardType (const boardType& x,
 : ::xml_schema::type (x, f, c),
   row_ (x.row_, f, this),
   shiftCard_ (x.shiftCard_, f, this),
-  treasure_ (x.treasure_, f, this)
+  forbidden_ (x.forbidden_, f, this)
 {
 }
 
@@ -1529,7 +1611,7 @@ boardType (const ::xercesc::DOMElement& e,
 : ::xml_schema::type (e, f | ::xml_schema::flags::base, c),
   row_ (f, this),
   shiftCard_ (f, this),
-  treasure_ (f, this)
+  forbidden_ (f, this)
 {
   if ((f & ::xml_schema::flags::base) == 0)
   {
@@ -1573,16 +1655,16 @@ parse (::xsd::cxx::xml::dom::parser< char >& p,
       }
     }
 
-    // treasure
+    // forbidden
     //
-    if (n.name () == "treasure" && n.namespace_ ().empty ())
+    if (n.name () == "forbidden" && n.namespace_ ().empty ())
     {
-      ::std::auto_ptr< treasure_type > r (
-        treasure_traits::create (i, f, this));
+      ::std::auto_ptr< forbidden_type > r (
+        forbidden_traits::create (i, f, this));
 
-      if (!treasure_.present ())
+      if (!forbidden_.present ())
       {
-        this->treasure_.set (r);
+        this->forbidden_.set (r);
         continue;
       }
     }
@@ -1597,10 +1679,10 @@ parse (::xsd::cxx::xml::dom::parser< char >& p,
       "");
   }
 
-  if (!treasure_.present ())
+  if (!forbidden_.present ())
   {
     throw ::xsd::cxx::tree::expected_element< char > (
-      "treasure",
+      "forbidden",
       "");
   }
 }
@@ -1877,16 +1959,22 @@ LoginReplyMessageType::
 //
 
 AwaitMoveMessageType::
-AwaitMoveMessageType (const board_type& board)
+AwaitMoveMessageType (const board_type& board,
+                      const treasure_type& treasure)
 : ::xml_schema::type (),
-  board_ (board, ::xml_schema::flags (), this)
+  board_ (board, ::xml_schema::flags (), this),
+  treausresToGo_ (::xml_schema::flags (), this),
+  treasure_ (treasure, ::xml_schema::flags (), this)
 {
 }
 
 AwaitMoveMessageType::
-AwaitMoveMessageType (::std::auto_ptr< board_type >& board)
+AwaitMoveMessageType (::std::auto_ptr< board_type >& board,
+                      const treasure_type& treasure)
 : ::xml_schema::type (),
-  board_ (board, ::xml_schema::flags (), this)
+  board_ (board, ::xml_schema::flags (), this),
+  treausresToGo_ (::xml_schema::flags (), this),
+  treasure_ (treasure, ::xml_schema::flags (), this)
 {
 }
 
@@ -1895,7 +1983,9 @@ AwaitMoveMessageType (const AwaitMoveMessageType& x,
                       ::xml_schema::flags f,
                       ::xml_schema::container* c)
 : ::xml_schema::type (x, f, c),
-  board_ (x.board_, f, this)
+  board_ (x.board_, f, this),
+  treausresToGo_ (x.treausresToGo_, f, this),
+  treasure_ (x.treasure_, f, this)
 {
 }
 
@@ -1904,7 +1994,9 @@ AwaitMoveMessageType (const ::xercesc::DOMElement& e,
                       ::xml_schema::flags f,
                       ::xml_schema::container* c)
 : ::xml_schema::type (e, f | ::xml_schema::flags::base, c),
-  board_ (f, this)
+  board_ (f, this),
+  treausresToGo_ (f, this),
+  treasure_ (f, this)
 {
   if ((f & ::xml_schema::flags::base) == 0)
   {
@@ -1937,6 +2029,31 @@ parse (::xsd::cxx::xml::dom::parser< char >& p,
       }
     }
 
+    // treausresToGo
+    //
+    if (n.name () == "treausresToGo" && n.namespace_ ().empty ())
+    {
+      ::std::auto_ptr< treausresToGo_type > r (
+        treausresToGo_traits::create (i, f, this));
+
+      this->treausresToGo_.push_back (r);
+      continue;
+    }
+
+    // treasure
+    //
+    if (n.name () == "treasure" && n.namespace_ ().empty ())
+    {
+      ::std::auto_ptr< treasure_type > r (
+        treasure_traits::create (i, f, this));
+
+      if (!treasure_.present ())
+      {
+        this->treasure_.set (r);
+        continue;
+      }
+    }
+
     break;
   }
 
@@ -1944,6 +2061,13 @@ parse (::xsd::cxx::xml::dom::parser< char >& p,
   {
     throw ::xsd::cxx::tree::expected_element< char > (
       "board",
+      "");
+  }
+
+  if (!treasure_.present ())
+  {
+    throw ::xsd::cxx::tree::expected_element< char > (
+      "treasure",
       "");
   }
 }
@@ -1957,6 +2081,105 @@ _clone (::xml_schema::flags f,
 
 AwaitMoveMessageType::
 ~AwaitMoveMessageType ()
+{
+}
+
+// TreasuresToGoType
+//
+
+TreasuresToGoType::
+TreasuresToGoType (const player_type& player,
+                   const treausres_type& treausres)
+: ::xml_schema::type (),
+  player_ (player, ::xml_schema::flags (), this),
+  treausres_ (treausres, ::xml_schema::flags (), this)
+{
+}
+
+TreasuresToGoType::
+TreasuresToGoType (const TreasuresToGoType& x,
+                   ::xml_schema::flags f,
+                   ::xml_schema::container* c)
+: ::xml_schema::type (x, f, c),
+  player_ (x.player_, f, this),
+  treausres_ (x.treausres_, f, this)
+{
+}
+
+TreasuresToGoType::
+TreasuresToGoType (const ::xercesc::DOMElement& e,
+                   ::xml_schema::flags f,
+                   ::xml_schema::container* c)
+: ::xml_schema::type (e, f | ::xml_schema::flags::base, c),
+  player_ (f, this),
+  treausres_ (f, this)
+{
+  if ((f & ::xml_schema::flags::base) == 0)
+  {
+    ::xsd::cxx::xml::dom::parser< char > p (e, true, false);
+    this->parse (p, f);
+  }
+}
+
+void TreasuresToGoType::
+parse (::xsd::cxx::xml::dom::parser< char >& p,
+       ::xml_schema::flags f)
+{
+  for (; p.more_elements (); p.next_element ())
+  {
+    const ::xercesc::DOMElement& i (p.cur_element ());
+    const ::xsd::cxx::xml::qualified_name< char > n (
+      ::xsd::cxx::xml::dom::name< char > (i));
+
+    // player
+    //
+    if (n.name () == "player" && n.namespace_ ().empty ())
+    {
+      if (!player_.present ())
+      {
+        this->player_.set (player_traits::create (i, f, this));
+        continue;
+      }
+    }
+
+    // treausres
+    //
+    if (n.name () == "treausres" && n.namespace_ ().empty ())
+    {
+      if (!treausres_.present ())
+      {
+        this->treausres_.set (treausres_traits::create (i, f, this));
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  if (!player_.present ())
+  {
+    throw ::xsd::cxx::tree::expected_element< char > (
+      "player",
+      "");
+  }
+
+  if (!treausres_.present ())
+  {
+    throw ::xsd::cxx::tree::expected_element< char > (
+      "treausres",
+      "");
+  }
+}
+
+TreasuresToGoType* TreasuresToGoType::
+_clone (::xml_schema::flags f,
+        ::xml_schema::container* c) const
+{
+  return new class TreasuresToGoType (*this, f, c);
+}
+
+TreasuresToGoType::
+~TreasuresToGoType ()
 {
 }
 
@@ -3072,7 +3295,7 @@ operator<< (::std::ostream& o, const boardType& i)
   }
 
   o << ::std::endl << "shiftCard: " << i.shiftCard ();
-  o << ::std::endl << "treasure: " << i.treasure ();
+  o << ::std::endl << "forbidden: " << i.forbidden ();
   return o;
 }
 
@@ -3102,6 +3325,22 @@ operator<< (::std::ostream& o, const LoginReplyMessageType& i)
 operator<< (::std::ostream& o, const AwaitMoveMessageType& i)
 {
   o << ::std::endl << "board: " << i.board ();
+  for (AwaitMoveMessageType::treausresToGo_const_iterator
+       b (i.treausresToGo ().begin ()), e (i.treausresToGo ().end ());
+       b != e; ++b)
+  {
+    o << ::std::endl << "treausresToGo: " << *b;
+  }
+
+  o << ::std::endl << "treasure: " << i.treasure ();
+  return o;
+}
+
+::std::ostream&
+operator<< (::std::ostream& o, const TreasuresToGoType& i)
+{
+  o << ::std::endl << "player: " << i.player ();
+  o << ::std::endl << "treausres: " << i.treausres ();
   return o;
 }
 
@@ -3640,15 +3879,15 @@ operator<< (::xercesc::DOMElement& e, const boardType& i)
     s << i.shiftCard ();
   }
 
-  // treasure
+  // forbidden
   //
   {
     ::xercesc::DOMElement& s (
       ::xsd::cxx::xml::dom::create_element (
-        "treasure",
+        "forbidden",
         e));
 
-    s << i.treasure ();
+    s << i.forbidden ();
   }
 }
 
@@ -3876,6 +4115,59 @@ operator<< (::xercesc::DOMElement& e, const AwaitMoveMessageType& i)
         e));
 
     s << i.board ();
+  }
+
+  // treausresToGo
+  //
+  for (AwaitMoveMessageType::treausresToGo_const_iterator
+       b (i.treausresToGo ().begin ()), n (i.treausresToGo ().end ());
+       b != n; ++b)
+  {
+    ::xercesc::DOMElement& s (
+      ::xsd::cxx::xml::dom::create_element (
+        "treausresToGo",
+        e));
+
+    s << *b;
+  }
+
+  // treasure
+  //
+  {
+    ::xercesc::DOMElement& s (
+      ::xsd::cxx::xml::dom::create_element (
+        "treasure",
+        e));
+
+    s << i.treasure ();
+  }
+}
+
+void
+operator<< (::xercesc::DOMElement& e, const TreasuresToGoType& i)
+{
+  e << static_cast< const ::xml_schema::type& > (i);
+
+  // player
+  //
+  {
+    ::xercesc::DOMElement& s (
+      ::xsd::cxx::xml::dom::create_element (
+        "player",
+        e));
+
+    s << i.player ();
+  }
+
+  // treausres
+  //
+  {
+    ::xercesc::DOMElement& s (
+      ::xsd::cxx::xml::dom::create_element (
+        "treausres",
+        e));
+
+    s << i.treausres ();
   }
 }
 
