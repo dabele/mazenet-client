@@ -282,6 +282,8 @@ class winner;
 
 #include <xsd/cxx/xml/dom/parsing-header.hxx>
 
+#include <xsd/cxx/tree/containers-wildcard.hxx>
+
 class MazeComType: public ::xml_schema::string
 {
   public:
@@ -295,6 +297,8 @@ class MazeComType: public ::xml_schema::string
     WIN,
     DISCONNECT
   };
+
+  MazeComType ();
 
   MazeComType (value v);
 
@@ -378,6 +382,8 @@ class treasureType: public ::xml_schema::string
     sym24
   };
 
+  treasureType ();
+
   treasureType (value v);
 
   treasureType (const char* v);
@@ -438,6 +444,8 @@ class ErrorType: public ::xml_schema::string
     TIMEOUT,
     TOO_MANY_TRIES
   };
+
+  ErrorType ();
 
   ErrorType (value v);
 
@@ -526,29 +534,33 @@ class cardType: public ::xml_schema::type
   // treasure
   // 
   typedef ::treasureType treasure_type;
+  typedef ::xsd::cxx::tree::optional< treasure_type > treasure_optional;
   typedef ::xsd::cxx::tree::traits< treasure_type, char > treasure_traits;
 
-  const treasure_type&
+  const treasure_optional&
   treasure () const;
 
-  treasure_type&
+  treasure_optional&
   treasure ();
 
   void
   treasure (const treasure_type& x);
 
   void
+  treasure (const treasure_optional& x);
+
+  void
   treasure (::std::auto_ptr< treasure_type > p);
 
   // Constructors.
   //
+  cardType ();
+
   cardType (const openings_type&,
-            const pin_type&,
-            const treasure_type&);
+            const pin_type&);
 
   cardType (::std::auto_ptr< openings_type >&,
-            ::std::auto_ptr< pin_type >&,
-            const treasure_type&);
+            ::std::auto_ptr< pin_type >&);
 
   cardType (const ::xercesc::DOMElement& e,
             ::xml_schema::flags f = 0,
@@ -575,7 +587,7 @@ class cardType: public ::xml_schema::type
   protected:
   ::xsd::cxx::tree::one< openings_type > openings_;
   ::xsd::cxx::tree::one< pin_type > pin_;
-  ::xsd::cxx::tree::one< treasure_type > treasure_;
+  treasure_optional treasure_;
 };
 
 class boardType: public ::xml_schema::type
@@ -618,27 +630,31 @@ class boardType: public ::xml_schema::type
   // forbidden
   // 
   typedef ::positionType forbidden_type;
+  typedef ::xsd::cxx::tree::optional< forbidden_type > forbidden_optional;
   typedef ::xsd::cxx::tree::traits< forbidden_type, char > forbidden_traits;
 
-  const forbidden_type&
+  const forbidden_optional&
   forbidden () const;
 
-  forbidden_type&
+  forbidden_optional&
   forbidden ();
 
   void
   forbidden (const forbidden_type& x);
 
   void
+  forbidden (const forbidden_optional& x);
+
+  void
   forbidden (::std::auto_ptr< forbidden_type > p);
 
   // Constructors.
   //
-  boardType (const shiftCard_type&,
-             const forbidden_type&);
+  boardType ();
 
-  boardType (::std::auto_ptr< shiftCard_type >&,
-             ::std::auto_ptr< forbidden_type >&);
+  boardType (const shiftCard_type&);
+
+  boardType (::std::auto_ptr< shiftCard_type >&);
 
   boardType (const ::xercesc::DOMElement& e,
              ::xml_schema::flags f = 0,
@@ -665,7 +681,7 @@ class boardType: public ::xml_schema::type
   protected:
   row_sequence row_;
   ::xsd::cxx::tree::one< shiftCard_type > shiftCard_;
-  ::xsd::cxx::tree::one< forbidden_type > forbidden_;
+  forbidden_optional forbidden_;
 };
 
 class positionType: public ::xml_schema::type
@@ -701,6 +717,8 @@ class positionType: public ::xml_schema::type
 
   // Constructors.
   //
+  positionType ();
+
   positionType (const row_type&,
                 const col_type&);
 
@@ -753,6 +771,8 @@ class LoginMessageType: public ::xml_schema::type
 
   // Constructors.
   //
+  LoginMessageType ();
+
   LoginMessageType (const name_type&);
 
   LoginMessageType (const ::xercesc::DOMElement& e,
@@ -800,6 +820,8 @@ class LoginReplyMessageType: public ::xml_schema::type
 
   // Constructors.
   //
+  LoginReplyMessageType ();
+
   LoginReplyMessageType (const newID_type&);
 
   LoginReplyMessageType (const ::xercesc::DOMElement& e,
@@ -848,22 +870,22 @@ class AwaitMoveMessageType: public ::xml_schema::type
   void
   board (::std::auto_ptr< board_type > p);
 
-  // treausresToGo
+  // treasuresToGo
   // 
-  typedef ::TreasuresToGoType treausresToGo_type;
-  typedef ::xsd::cxx::tree::sequence< treausresToGo_type > treausresToGo_sequence;
-  typedef treausresToGo_sequence::iterator treausresToGo_iterator;
-  typedef treausresToGo_sequence::const_iterator treausresToGo_const_iterator;
-  typedef ::xsd::cxx::tree::traits< treausresToGo_type, char > treausresToGo_traits;
+  typedef ::TreasuresToGoType treasuresToGo_type;
+  typedef ::xsd::cxx::tree::sequence< treasuresToGo_type > treasuresToGo_sequence;
+  typedef treasuresToGo_sequence::iterator treasuresToGo_iterator;
+  typedef treasuresToGo_sequence::const_iterator treasuresToGo_const_iterator;
+  typedef ::xsd::cxx::tree::traits< treasuresToGo_type, char > treasuresToGo_traits;
 
-  const treausresToGo_sequence&
-  treausresToGo () const;
+  const treasuresToGo_sequence&
+  treasuresToGo () const;
 
-  treausresToGo_sequence&
-  treausresToGo ();
+  treasuresToGo_sequence&
+  treasuresToGo ();
 
   void
-  treausresToGo (const treausresToGo_sequence& s);
+  treasuresToGo (const treasuresToGo_sequence& s);
 
   // treasure
   // 
@@ -884,6 +906,8 @@ class AwaitMoveMessageType: public ::xml_schema::type
 
   // Constructors.
   //
+  AwaitMoveMessageType ();
+
   AwaitMoveMessageType (const board_type&,
                         const treasure_type&);
 
@@ -914,7 +938,7 @@ class AwaitMoveMessageType: public ::xml_schema::type
 
   protected:
   ::xsd::cxx::tree::one< board_type > board_;
-  treausresToGo_sequence treausresToGo_;
+  treasuresToGo_sequence treasuresToGo_;
   ::xsd::cxx::tree::one< treasure_type > treasure_;
 };
 
@@ -935,24 +959,26 @@ class TreasuresToGoType: public ::xml_schema::type
   void
   player (const player_type& x);
 
-  // treausres
+  // treasures
   // 
-  typedef ::xml_schema::int_ treausres_type;
-  typedef ::xsd::cxx::tree::traits< treausres_type, char > treausres_traits;
+  typedef ::xml_schema::int_ treasures_type;
+  typedef ::xsd::cxx::tree::traits< treasures_type, char > treasures_traits;
 
-  const treausres_type&
-  treausres () const;
+  const treasures_type&
+  treasures () const;
 
-  treausres_type&
-  treausres ();
+  treasures_type&
+  treasures ();
 
   void
-  treausres (const treausres_type& x);
+  treasures (const treasures_type& x);
 
   // Constructors.
   //
+  TreasuresToGoType ();
+
   TreasuresToGoType (const player_type&,
-                     const treausres_type&);
+                     const treasures_type&);
 
   TreasuresToGoType (const ::xercesc::DOMElement& e,
                      ::xml_schema::flags f = 0,
@@ -978,7 +1004,7 @@ class TreasuresToGoType: public ::xml_schema::type
 
   protected:
   ::xsd::cxx::tree::one< player_type > player_;
-  ::xsd::cxx::tree::one< treausres_type > treausres_;
+  ::xsd::cxx::tree::one< treasures_type > treasures_;
 };
 
 class MoveMessageType: public ::xml_schema::type
@@ -1037,6 +1063,8 @@ class MoveMessageType: public ::xml_schema::type
 
   // Constructors.
   //
+  MoveMessageType ();
+
   MoveMessageType (const shiftPosition_type&,
                    const newPinPos_type&,
                    const shiftCard_type&);
@@ -1109,6 +1137,8 @@ class AcceptMessageType: public ::xml_schema::type
 
   // Constructors.
   //
+  AcceptMessageType ();
+
   AcceptMessageType (const accept_type&,
                      const errorCode_type&);
 
@@ -1178,6 +1208,8 @@ class WinMessageType: public ::xml_schema::type
 
   // Constructors.
   //
+  WinMessageType ();
+
   WinMessageType (const board_type&,
                   const winner_type&);
 
@@ -1250,6 +1282,8 @@ class DisconnectMessageType: public ::xml_schema::type
 
   // Constructors.
   //
+  DisconnectMessageType ();
+
   DisconnectMessageType (const name_type&,
                          const erroCode_type&);
 
@@ -1341,6 +1375,8 @@ class openings: public ::xml_schema::type
 
   // Constructors.
   //
+  openings ();
+
   openings (const top_type&,
             const bottom_type&,
             const left_type&,
@@ -1658,6 +1694,8 @@ class MazeCom: public ::xml_schema::type
 
   // Constructors.
   //
+  MazeCom ();
+
   MazeCom (const mcType_type&,
            const id_type&);
 
@@ -1714,6 +1752,8 @@ class winner: public ::xml_schema::string
 
   // Constructors.
   //
+  winner ();
+
   winner (const id_type&);
 
   winner (const char*,

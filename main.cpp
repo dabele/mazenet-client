@@ -1,5 +1,6 @@
 #include <string>
 #include <iostream>
+#include <fstream>
 
 #include "boost/asio.hpp"
 
@@ -26,16 +27,29 @@ int main(int argc, char** argv)
 		port = "5123";
 	}
 
-	/*client c(host, port);
+	client c(host, port);
 	c.login(string("c"));
 
 	client d(host, port);
-	d.login(string("d"));*/
+	d.login(string("d"));
 
-	MazeCom m(MazeComType::AWAITMOVE, 1);
-	positionType forbidden(1, 2);
-	cardType(
+	try
+	{
+		c.play();
+	}
+	catch (xml_schema::expected_element& e)
+	{
+		cout << e.what() << ": " << e.name() << endl;
+	}
 
-	c.play();
+	/*try
+	{
+		std::ifstream ifs("D:\\exercises\\Rechnernetze\\MazeNet\\awaitmove.xml");
+		cout << *MazeCom_(ifs, xml_schema::flags::dont_validate) << endl;
+	}
+	catch (xml_schema::expected_element& e)
+	{
+		cout << e.what() << ": " << e.name() << endl;
+	}*/
 
 }

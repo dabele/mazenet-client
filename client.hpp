@@ -2,6 +2,7 @@
 #define CLIENT_HPP
 
 #include <string>
+#include <fstream>
 
 #include "boost/asio.hpp"
 #include "boost/bind.hpp"
@@ -16,6 +17,8 @@ typedef std::auto_ptr<MazeCom> MazeCom_Ptr;
 
 class client 
 {	
+	static std::ofstream log;
+
 	io_service io_service_;
 	tcp::socket socket_;
 	MazeCom::id_type id_;
@@ -37,6 +40,7 @@ public:
 
 private:
 	MazeCom_Ptr await_move_request();
+	positionType find_player(const boardType&);
 };
 
 

@@ -2,11 +2,13 @@
 
 #include <sstream>
 #include <iostream>
+#include <fstream>
 
 namespace asio = boost::asio;
 using asio::ip::tcp;
 using std::stringstream;
 
+std::ofstream client::log("D:\\exercises\\rechnernetze\\mazenet\\log.txt");
 
 client::client(const string& host, const string& port)
 	: 	io_service_(), socket_(io_service_)
@@ -23,6 +25,9 @@ void client::send(const MazeCom& msg)
 	stringstream serializationStream;
 	MazeCom_(serializationStream, msg);
 	string serializedMsg(serializationStream.str());
+
+	log << "sent:\n" << serializedMsg;
+
 	int msgLength = serializedMsg.length();
 	asio::write(socket_, asio::buffer(&msgLength, 4));
 	asio::write(socket_, boost::asio::buffer(serializedMsg, msgLength));
@@ -55,6 +60,7 @@ MazeCom_Ptr client::recv(MazeComType type)
 	delete[] buf;
 	
 	string dbg(ss.str());
+	log << "recved:\n" << dbg << std::endl;
 
 	MazeCom_Ptr msg(MazeCom_(ss, xml_schema::flags::dont_validate));
 
@@ -87,10 +93,43 @@ void client::play()
 	//calculate move
 	//TODO algorithm
 	//just make any move to check communication
-	std::cout << *moveRequest << std::endl;
-	return;
+	AwaitMoveMessageType content = *moveRequest->AwaitMoveMessage();
+	cardType card = content.board().shiftCard();
+	positionType pinPos = find_player(content.board());
+	positionType movePos(0,1);
 
-
+	//mock move (don't change pin position, don't turn card, move the first column)
+	MoveMessageType moveMsg;
+	moveMsg.shiftCard(card);
+	moveMsg.newPinPos(pinPos);
+	moveMsg.shiftPosition(movePos);
+	
 	//send move
-	MazeCom moveMsg(MazeComType::MOVE, id_);
+	MazeCom msg(MazeComType::MOVE, id_);
+	msg.MoveMessage(moveMsg);
+	send(msg);
+
+	//await reply, end
+	MazeCom_Ptr accept(recv(MazeComType::ACCEPT));
+	std::cout << *accept;
+}
+
+positionType client::find_player(const boardType& b)
+{
+	positionType rslt(0, 0);
+	for (boardType::row_const_iterator row_it = b.row().begin(); row_it < b.row().end(); row_it++)
+	{				
+		rslt.col() = 0;
+		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
+		{			
+			if (std::find(col_it->pin().playerID().begin(), col_it->pin().playerID().end(), id_) != col_it->pin().playerID().end())
+			{
+				return rslt;
+			}
+			rslt.col() += 1;
+		}
+		rslt.row() += 1;
+	}
+
+	return rslt;
 }
