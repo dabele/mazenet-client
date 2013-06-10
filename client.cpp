@@ -8,7 +8,7 @@ namespace asio = boost::asio;
 using asio::ip::tcp;
 using std::stringstream;
 
-std::ofstream client::log("D:\\exercises\\rechnernetze\\mazenet\\log.txt");
+std::ofstream client::log("log.txt");
 
 client::client(const string& host, const string& port)
 	: 	io_service_(), socket_(io_service_)
@@ -111,22 +111,69 @@ void client::play()
 	std::cout << *accept;
 }
 
-positionType client::find_player(const boardType& b)
+void client::find_player(const boardType& b, positionType& p)
 {
-	positionType rslt(0, 0);
+	p = positionType(0, 0);
 	for (boardType::row_const_iterator row_it = b.row().begin(); row_it < b.row().end(); row_it++)
 	{				
-		rslt.col() = 0;
+		p.col() = 0;
 		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
 		{			
 			if (std::find(col_it->pin().playerID().begin(), col_it->pin().playerID().end(), id_) != col_it->pin().playerID().end())
 			{
-				return rslt;
+				return;
 			}
-			rslt.col() += 1;
+			p.col() += 1;
 		}
-		rslt.row() += 1;
+		p.row() += 1;
 	}
+}
 
-	return rslt;
+void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessageType& moveMsg) 
+{
+	positionType movePos(0,0);
+	for ( ; movePos.row < 7; ++movePos.row) 
+	{
+		int start, step, direction;
+
+		if (movePos.row % 6 == 0) //first and last row: try every second column
+		{
+			start = 1;
+			step = 2;
+		} 
+		else if (movePos.row % 2 == 1) //every uneven row: try first and last column
+		{
+			start = 0;
+			step = 6;
+		}
+		else 
+		{
+			start = 7; //other rows: don't try anything
+		}
+
+		for (movePos.col = start; movePos.col < 7; movePos.col += step) 
+		{
+			if (awaitMoveMsg.board().forbidden().present() && *awaitMoveMsg.board().forbidden() == movePos)
+			{
+				continue;
+			}
+
+			cardType shiftCard(awaitMoveMsg.board().shiftCard());
+
+			for (int rotation = 0; rotation < 4; ++rotation)
+			{
+				rotate(shiftCard);
+
+			}
+		}
+	}
+}
+
+void client::rotate(cardType& card) 
+{
+	bool tmp = card.openings().top();
+	card.openings().top() = card.openings().left();
+	card.openings().left() = card.openings().bottom();
+	card.openings().bottom() = card.openings().right();
+	card.openings().right() = tmp;
 }

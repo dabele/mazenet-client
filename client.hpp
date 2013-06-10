@@ -39,8 +39,9 @@ public:
 	void play();
 
 private:
-	MazeCom_Ptr await_move_request();
-	positionType find_player(const boardType&);
+	void find_player(const boardType&, positionType&);
+	void find_next_move(const AwaitMoveMessageType&, MoveMessageType&);
+	void rotate(cardType&);
 };
 
 

@@ -5,6 +5,7 @@
 #undef ERROR
 #undef NOERROR
 
+#pragma warning disable 4996
 #include "mazeCom.hpp"
 
 #endif

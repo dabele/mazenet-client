@@ -12,7 +12,7 @@ link_directories(${BOOST_DIR}/lib)
 set(XSD_FILE "mazeCom.xsd" CACHE PATH "xml schema definition (absolute path or relative path from binary dir")
 
 set(XSD_COMMAND 
-	COMMAND xsd cxx-tree --generate-serialization --generate-ostream --generate-comparison --output-dir "." 
+	COMMAND xsd cxx-tree --generate-serialization --generate-ostream --generate-comparison --generate-default-ctor --output-dir "." 
 			--hxx-suffix ".hpp" --cxx-suffix ".cpp" --ixx-suffix ".ipp" --fwd-suffix "-fwd.hpp" "${XSD_FILE}"
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR})	
 execute_process(${XSD_COMMAND} RESULT_VARIABLE XSD_RETURN OUTPUT_VARIABLE XSD_MESSAGE ERROR_VARIABLE XSD_MESSAGE)
