@@ -99,10 +99,7 @@ void client::play()
 	positionType movePos(0,1);
 
 	//mock move (don't change pin position, don't turn card, move the first column)
-	MoveMessageType moveMsg;
-	moveMsg.shiftCard(card);
-	moveMsg.newPinPos(pinPos);
-	moveMsg.shiftPosition(movePos);
+	MoveMessageType moveMsg(movePos, pinPos, card);
 	
 	//send move
 	MazeCom msg(MazeComType::MOVE, id_);
