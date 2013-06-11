@@ -143,7 +143,16 @@ void client::find_player(const boardType& b, positionType& p)
 
 void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessageType& moveMsg) 
 {
-	
+	vector<shared_ptr<boardType>> possibleBoards;
+	expand_board(awaitMoveMsg.board(), possibleBoards);
+
+	for (int i = 0; i < possibleBoards.size(); ++i)
+	{
+		set<positionType, positionComp> possiblePositions;
+		expand_pin_positions(*possibleBoards[i], awaitMoveMsg.treasure, possiblePositions);
+	}
+
+
 }
 
 void client::expand_board(const boardType& parent, vector<shared_ptr<boardType>>& children)
