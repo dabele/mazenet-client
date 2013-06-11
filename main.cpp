@@ -28,9 +28,9 @@ int main(int argc, char** argv)
 	}
 
 	client c(host, port);
-	c.login(string("c"));
+	//c.login(string("c"));
 
-	client d(host, port);
+	/*client d(host, port);
 	d.login(string("d"));
 
 	try
@@ -40,16 +40,37 @@ int main(int argc, char** argv)
 	catch (xml_schema::expected_element& e)
 	{
 		cout << e.what() << ": " << e.name() << endl;
-	}
+	}*/
 
-	/*try
+	try
 	{
-		std::ifstream ifs("D:\\exercises\\Rechnernetze\\MazeNet\\awaitmove.xml");
-		cout << *MazeCom_(ifs, xml_schema::flags::dont_validate) << endl;
+		std::ifstream ifs("board.txt");
+		ofstream ofs("boards.txt");
+		ofstream ofs2("pins.txt");
+
+		MazeCom_Ptr msg(MazeCom_(ifs, xml_schema::flags::dont_validate));
+		msg->AwaitMoveMessage()->board().forbidden() = positionType(0,1);
+		print(ofs, msg->AwaitMoveMessage()->board());
+		
+		vector<shared_ptr<boardType>> v;		
+		c.expand_board(msg->AwaitMoveMessage()->board(), v);
+
+		for (int i = 0; i < v.size(); ++i)
+		{
+			print(ofs, *v[i]);
+			ofs << "\n///////////////////////////////////////////////////\n";
+		}
+
+		set<positionType, client::positionComp> s;
+		c.expand_pin_positions(msg->AwaitMoveMessage()->board(), msg->AwaitMoveMessage()->treasure(), s);
+		print(ofs2, msg->AwaitMoveMessage()->board());
+		for (set<positionType, client::positionComp>::iterator pos = s.begin(); pos != s.end(); ++pos)
+		{
+			ofs2 << "(" << pos->row() << ", " << pos->col() << ")\n";
+		}
 	}
 	catch (xml_schema::expected_element& e)
 	{
 		cout << e.what() << ": " << e.name() << endl;
-	}*/
-
+	}
 }

@@ -3,13 +3,17 @@
 
 #include <string>
 #include <fstream>
+#include <memory>
+#include <vector>
+#include <set>
 
 #include "boost/asio.hpp"
 #include "boost/bind.hpp"
 
 #include "mazeCom_.hpp"
 
-using std::string;
+using namespace std;
+
 using boost::asio::io_service;
 using boost::asio::ip::tcp;
 
@@ -17,8 +21,29 @@ typedef std::auto_ptr<MazeCom> MazeCom_Ptr;
 
 class client 
 {	
-	static std::ofstream log;
+public:
+	struct positionComp 
+	{
+		bool operator()(const positionType& p1, const positionType& p2)
+		{
+			if (p1.row() < p2.row()) 
+			{
+				return true;
+			}
+			else if (p1.row() == p2.row()) 
+			{
+				if (p1.col() < p2.col())
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+	};
 
+	static std::ofstream log;	
+
+private:
 	io_service io_service_;
 	tcp::socket socket_;
 	MazeCom::id_type id_;
@@ -27,6 +52,8 @@ class client
 	client& operator=(const client&);
 
 public:
+	
+
 	//connect
 	client(const string& ip, const string& port);
 
@@ -38,10 +65,15 @@ public:
 	void login(string& name);
 	void play();
 
-private:
+//private:
 	void find_player(const boardType&, positionType&);
 	void find_next_move(const AwaitMoveMessageType&, MoveMessageType&);
+	void expand_board(const boardType&, vector<shared_ptr<boardType>>&); //all possible shift results
+	void expand_pin_positions(const boardType&, const treasureType&, set<positionType, positionComp>&); //all possible pin positions without shifting
+
+	//help functions
 	void rotate(cardType&);
+	positionType opposite(const positionType&);
 };
 
 
