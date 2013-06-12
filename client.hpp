@@ -43,6 +43,7 @@ public:
 
 	static std::ofstream log;	
 
+	typedef shared_ptr<boardType> pBoardType;
 private:
 	io_service io_service_;
 	tcp::socket socket_;
@@ -68,8 +69,8 @@ public:
 //private:
 	void find_player(const boardType&, positionType&);
 	void find_next_move(const AwaitMoveMessageType&, MoveMessageType&);
-	void expand_board(const boardType&, vector<shared_ptr<boardType>>&); //all possible shift results
-	void expand_pin_positions(const boardType&, const treasureType&, set<positionType, positionComp>&); //all possible pin positions without shifting
+	void expand_board(const boardType&, vector<pBoardType>&); //all possible shift results
+	bool expand_pin_positions(const boardType&, const treasureType&, vector<pBoardType>&); //all possible pin positions without shifting
 
 	//help functions
 	void rotate(cardType&);

@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 		msg->AwaitMoveMessage()->board().forbidden() = positionType(0,1);
 		print(ofs, msg->AwaitMoveMessage()->board());
 		
-		vector<shared_ptr<boardType>> v;		
+		vector<client::pBoardType> v;
 		c.expand_board(msg->AwaitMoveMessage()->board(), v);
 
 		for (int i = 0; i < v.size(); ++i)
@@ -61,12 +61,14 @@ int main(int argc, char** argv)
 			ofs << "\n///////////////////////////////////////////////////\n";
 		}
 
-		set<positionType, client::positionComp> s;
+		vector<client::pBoardType> s;
 		c.expand_pin_positions(msg->AwaitMoveMessage()->board(), msg->AwaitMoveMessage()->treasure(), s);
 		print(ofs2, msg->AwaitMoveMessage()->board());
-		for (set<positionType, client::positionComp>::iterator pos = s.begin(); pos != s.end(); ++pos)
+		for (int i = 0; i < s.size(); ++i)
 		{
-			ofs2 << "(" << pos->row() << ", " << pos->col() << ")\n";
+			positionType pos;
+			c.find_player(*s[i], pos);
+			ofs2 << "(" << pos.col() << "," << pos.row() << ")" << endl;
 		}
 	}
 	catch (xml_schema::expected_element& e)

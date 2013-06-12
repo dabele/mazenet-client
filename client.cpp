@@ -143,19 +143,36 @@ void client::find_player(const boardType& b, positionType& p)
 
 void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessageType& moveMsg) 
 {
-	vector<shared_ptr<boardType>> possibleBoards;
+	int numPlayers = awaitMoveMsg.treasuresToGo().size();
+	vector<pBoardType> possibleBoards, possibleBoardsAllPositions;
 	expand_board(awaitMoveMsg.board(), possibleBoards);
 
 	for (int i = 0; i < possibleBoards.size(); ++i)
 	{
-		set<positionType, positionComp> possiblePositions;
-		expand_pin_positions(*possibleBoards[i], awaitMoveMsg.treasure, possiblePositions);
+		vector<pBoardType> possiblePositions;
+
+		if (expand_pin_positions(*possibleBoards[i], awaitMoveMsg.treasure(), possiblePositions))
+		{
+			positionType shiftPos, pinPos;
+			cardType shiftCard;
+			
+			shiftPos = opposite(*possiblePositions[i]->forbidden());
+			find_player(*possiblePositions[i], pinPos);
+			shiftCard = possiblePositions[i]->row()[shiftPos.row()].col()[shiftPos.col()];
+
+			moveMsg.shiftPosition() = shiftPos;
+			moveMsg.newPinPos() = pinPos;
+			moveMsg.shiftCard() = shiftCard;
+			return;
+		}
+		else 
+		{
+			possibleBoardsAllPositions.insert(possibleBoardsAllPositions.end(), possiblePositions.begin(), possiblePositions.end());
+		}
 	}
-
-
 }
 
-void client::expand_board(const boardType& parent, vector<shared_ptr<boardType>>& children)
+void client::expand_board(const boardType& parent, vector<pBoardType>& children)
 {
 	positionType shiftPos(0,0);
 	for ( ; shiftPos.row() < 7; ++shiftPos.row()) 
@@ -185,11 +202,21 @@ void client::expand_board(const boardType& parent, vector<shared_ptr<boardType>>
 			}
 
 			cardType shiftCard(parent.shiftCard());
+			int nPossibleOrientations;
+			if ((shiftCard.openings().top() && shiftCard.openings().bottom()) || 
+				(shiftCard.openings().left() && shiftCard.openings().right()))
+			{
+				nPossibleOrientations = 2;
+			} 
+			else
+			{
+				nPossibleOrientations = 4;
+			}
 
-			for (int rotation = 0; rotation < 4; ++rotation)
+			for (int rotation = 0; rotation < nPossibleOrientations; ++rotation)
 			{
 				rotate(shiftCard);
-				shared_ptr<boardType> newBoard(new boardType(parent));
+				pBoardType newBoard(new boardType(parent));
 				newBoard->forbidden() = opposite(shiftPos);
 				newBoard->shiftCard() = newBoard->row()[newBoard->forbidden()->row()].col()[newBoard->forbidden()->col()];
 				newBoard->row()[shiftPos.row()].col()[shiftPos.col()] = shiftCard;
@@ -213,22 +240,55 @@ void client::expand_board(const boardType& parent, vector<shared_ptr<boardType>>
 	}
 }
 
-void client::expand_pin_positions(const boardType& board, const treasureType& treasure, set<positionType, positionComp>& children)
+bool client::expand_pin_positions(const boardType& board, const treasureType& treasure, vector<pBoardType>& children)
 {
 	positionType playerPos;
 	find_player(board, playerPos);
 
 	queue<positionType, deque<positionType>> queue;
 	queue.push(playerPos);
+	set<positionType, positionComp> used;
 
 	while (!queue.empty()) 
 	{
 		positionType curPos = queue.front();
 		queue.pop();
 
-		if (children.find(curPos) == children.end()) 
+		if (used.find(curPos) == used.end()) 
 		{
-			children.insert(curPos);
+			//copy board
+			pBoardType b(new boardType(board));
+
+			//remove player pin from player position
+			pin::playerID_sequence pins = b->row()[playerPos.row()].col()[playerPos.col()].pin().playerID();
+			for (pin::playerID_iterator pin = pins.begin(); pin < pins.end(); ++pin)
+			{
+				if (*pin == id_)
+				{
+					pins.erase(pin);
+					break;
+				}
+			}
+
+			//add player pin to current position
+			cardType* curPosCard = &b->row()[playerPos.row()].col()[playerPos.col()];
+			curPosCard->pin().playerID().push_back(id_);
+
+			//if treasure is found, delete all other expanded boards, add current board and return
+			if (curPosCard->treasure().present() && *curPosCard->treasure() == treasure)
+			{
+				children.clear();
+				children.push_back(b);
+				return true;
+			}
+
+			//add board to children
+			children.push_back(b);
+
+			//mark position as used to not expand it again
+			used.insert(curPos);
+
+			//check/enqueue neighbords
 			openings o = board.row()[curPos.row()].col()[curPos.col()].openings();
 
 			if (o.top() && curPos.row() > 0)
@@ -268,6 +328,8 @@ void client::expand_pin_positions(const boardType& board, const treasureType& tr
 			}
 		}
 	}
+
+	return false;
 }
 
 positionType client::opposite(const positionType& pos)
