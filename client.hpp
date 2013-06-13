@@ -68,12 +68,16 @@ public:
 
 //private:
 	void find_player(const boardType&, positionType&);
+	void find_player(const boardType&, int id, positionType&);
 	void find_next_move(const AwaitMoveMessageType&, MoveMessageType&);
 	void expand_board(const boardType&, vector<pBoardType>&); //all possible shift results
 	bool expand_pin_positions(const boardType&, const treasureType&, vector<pBoardType>&); //all possible pin positions without shifting
 
 	//help functions
 	void rotate(cardType&);
+	void shift(boardType&, const positionType&, const cardType&);
+	int count_freedom_opponents(const boardType&, const AwaitMoveMessageType::treasuresToGo_sequence&);
+	bool can_reach(const boardType&, const treasureType&);
 	positionType opposite(const positionType&);
 };
 
