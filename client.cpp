@@ -150,12 +150,14 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 		vector<pBoardType> possiblePositions;
 
 		if (expand_pin_positions(*possibleBoards[i], awaitMoveMsg.treasure(), possiblePositions)) //treasure is reachable on this board
-		{
+		{			
 			//determine sum of possible movements for opponents
 			int freedom = count_freedom_opponents(*possibleBoards[i], awaitMoveMsg.treasuresToGo());
 
 			if (freedom < minFreedom) 
 			{
+				minFreedom = freedom;
+
 				positionType shiftPos, pinPos;
 				cardType shiftCard;
 			
@@ -264,8 +266,8 @@ void client::expand_board(const boardType& parent, vector<pBoardType>& children)
 
 			cardType shiftCard(parent.shiftCard());
 			int nPossibleOrientations;
-			if ((shiftCard.openings().top() && shiftCard.openings().bottom()) || 
-				(shiftCard.openings().left() && shiftCard.openings().right()))
+			if ((shiftCard.openings().top() && shiftCard.openings().bottom() && !shiftCard.openings().left() && !shiftCard.openings().right()) || 
+				(!shiftCard.openings().top() && !shiftCard.openings().bottom() && shiftCard.openings().left() && shiftCard.openings().right()))
 			{
 				nPossibleOrientations = 2;
 			} 
@@ -305,18 +307,18 @@ bool client::expand_pin_positions(const boardType& board, const treasureType& tr
 			pBoardType b(new boardType(board));
 
 			//remove player pin from player position
-			pin::playerID_sequence pins = b->row()[playerPos.row()].col()[playerPos.col()].pin().playerID();
-			for (pin::playerID_iterator pin = pins.begin(); pin < pins.end(); ++pin)
+			cardType* oldPosCard = &b->row()[playerPos.row()].col()[playerPos.col()];
+			for (pin::playerID_iterator pin = oldPosCard->pin().playerID().begin(); pin < oldPosCard->pin().playerID().end(); ++pin)
 			{
 				if (*pin == id_)
 				{
-					pins.erase(pin);
+					oldPosCard->pin().playerID().erase(pin);
 					break;
 				}
 			}
 
 			//add player pin to current position
-			cardType* curPosCard = &b->row()[playerPos.row()].col()[playerPos.col()];
+			cardType* curPosCard = &b->row()[curPos.row()].col()[curPos.col()];
 			curPosCard->pin().playerID().push_back(id_);
 
 			//if treasure is found, delete all other expanded boards, add current board and return
@@ -418,7 +420,7 @@ int client::count_freedom_opponents(const boardType& board, const AwaitMoveMessa
 		return INT_MAX;
 	}
 
-	int sumTreasures = 0;
+	int sumTreasures = 1; //sum one greater than actual sum so result is not always zero with one opponent
 	for (AwaitMoveMessageType::treasuresToGo_const_iterator player = treasuresToGo.begin(); player != treasuresToGo.end(); ++player)
 	{
 		if (player->player() != id_)
@@ -434,6 +436,11 @@ int client::count_freedom_opponents(const boardType& board, const AwaitMoveMessa
 		int id = player->player();
 		int numTreasures = player->treasures();
 		int numPositions = 0;
+
+		if (id == id_)
+		{
+			continue;
+		}
 
 		//count possible positions of the player using breadth first search
 		positionType playerPos;
@@ -623,15 +630,132 @@ void client::rotate(cardType& card)
 
 void print(ostream& os, boardType& b)
 {
-	os << "-----------------------------\n";
 	for (boardType::row_const_iterator row_it = b.row().begin(); row_it < b.row().end(); row_it++)
-	{		
+	{				
+		//oberes drittel
 		os << "|";
 		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
 		{	
 			if (col_it->openings().top())
 			{
-				os << "# #|";
+				os << ">>>   <<<|";
+			}
+			else 
+			{
+				os << ">>>>-<<<<|";
+			}
+		}
+
+		if (row_it == b.row().begin())
+		{
+			if (b.shiftCard().openings().top())
+			{
+				os << "###   ###";
+			}
+			else 
+			{
+				os << "#########";
+			}
+		}
+		os << "\n";
+		os << "|";
+		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
+		{	
+			if (col_it->openings().top())
+			{
+				os << "###   ###|";
+			}
+			else 
+			{
+				os << "#########|";
+			}
+		}
+
+		if (row_it == b.row().begin())
+		{
+			if (b.shiftCard().openings().top())
+			{
+				os << "###   ###";
+			}
+			else 
+			{
+				os << "#########";
+			}
+		}
+		os << "\n";
+		/*for (int i = 0; i < 2; ++i)
+		{
+			os << "|";
+			for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
+			{	
+				if (col_it->openings().top())
+				{
+					os << "###   ###|";
+				}
+				else 
+				{
+					os << "#########|";
+				}
+			}
+
+			if (row_it == b.row().begin())
+			{
+				if (b.shiftCard().openings().top())
+				{
+					os << "###   ###";
+				}
+				else 
+				{
+					os << "#########";
+				}
+			}
+			os << "\n";
+		}		*/
+
+		//mittleres drittel
+		//erste zeile
+		os << "|";
+		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
+		{				
+			if (col_it->openings().left())
+			{
+				os << "   ";
+			} 
+			else
+			{
+				os << "###";
+			}
+
+			if (find(col_it->pin().playerID().begin(), col_it->pin().playerID().end(), 1) != col_it->pin().playerID().end())
+			{
+				os << "1";
+			} 
+			else
+			{
+				os << " ";
+			}
+
+			if (col_it->treasure().present())
+			{
+				os << "T";
+			}
+			else
+			{
+				os << " ";
+			}
+
+			if (find(col_it->pin().playerID().begin(), col_it->pin().playerID().end(), 2) != col_it->pin().playerID().end())
+			{
+				os << "2";
+			} 
+			else
+			{
+				os << " ";
+			}
+
+			if (col_it->openings().right())
+			{
+				os << "   |";
 			}
 			else 
 			{
@@ -640,10 +764,27 @@ void print(ostream& os, boardType& b)
 		}
 		if (row_it == b.row().begin())
 		{
-			os << "     ";
-			if (b.shiftCard().openings().top())
+			if (b.shiftCard().openings().left())
 			{
-				os << "# #";
+				os << "   ";
+			} 
+			else
+			{
+				os << "###";
+			}
+
+			if (b.shiftCard().treasure().present())
+			{
+				os << " T ";
+			}
+			else
+			{
+				os << "   ";
+			}
+
+			if (b.shiftCard().openings().right())
+			{
+				os << "   ";
 			}
 			else 
 			{
@@ -651,67 +792,41 @@ void print(ostream& os, boardType& b)
 			}
 		}
 		os << "\n|";
+
+		//zweite zeile
 		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
 		{	
 			if (col_it->openings().left())
 			{
-				os << " ";
+				os << "   ";
 			} 
 			else
 			{
-				os << "#";
+				os << "###";
 			}
-			if (col_it->treasure().present())
+
+			if (find(col_it->pin().playerID().begin(), col_it->pin().playerID().end(), 3) != col_it->pin().playerID().end())
 			{
-				os << "T";
+				os << "3";
 			} 
 			else
 			{
 				os << " ";
 			}
+			os << " ";
+			if (find(col_it->pin().playerID().begin(), col_it->pin().playerID().end(), 4) != col_it->pin().playerID().end())
+			{
+				os << "4";
+			}
+			else 
+			{
+				os << " ";
+			}
+
+
 			if (col_it->openings().right())
 			{
-				os << " |";
-			}
-			else 
-			{
-				os << "#|";
-			}
-		}
-		if (row_it == b.row().begin())
-		{
-			os << "     ";
-			if (b.shiftCard().openings().left())
-			{
-				os << " ";
-			} 
-			else
-			{
-				os << "#";
-			}
-			if (b.shiftCard().treasure().present())
-			{
-				os << "T";
-			} 
-			else
-			{
-				os << " ";
-			}
-			if (b.shiftCard().openings().right())
-			{
-				os << " ";
-			}
-			else 
-			{
-				os << "#";
-			}
-		}
-		os << "\n|";
-		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
-		{	
-			if (col_it->openings().bottom())
-			{
-				os << "# #|";
+				os << "   |";
 			}
 			else 
 			{
@@ -720,16 +835,55 @@ void print(ostream& os, boardType& b)
 		}
 		if (row_it == b.row().begin())
 		{
-			os << "     ";
-			if (b.shiftCard().openings().bottom())
+			if (b.shiftCard().openings().left())
 			{
-				os << "# #";
+				os << "   ";
+			} 
+			else
+			{
+				os << "###";
+			}
+			os << "   ";
+			if (b.shiftCard().openings().right())
+			{
+				os << "   ";
 			}
 			else 
 			{
 				os << "###";
 			}
 		}
-		os << "\n-----------------------------\n";
+		os << "\n";
+
+		//unteres drittel
+		for (int i = 0; i < 2; ++i)
+		{
+			os << "|";
+			for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
+			{	
+				if (col_it->openings().bottom())
+				{
+					os << "###   ###|";
+				}
+				else 
+				{
+					os << "#########|";
+				}
+			}
+			if (row_it == b.row().begin())
+			{
+				if (b.shiftCard().openings().bottom())
+				{
+					os << "###   ###";
+				}
+				else 
+				{
+					os << "#########";
+				}
+			}
+			os << "\n";
+		}
+		
+		//os << "-----------------------------------------------------------------------\n";
 	}
 }

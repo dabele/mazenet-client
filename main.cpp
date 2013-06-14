@@ -49,27 +49,39 @@ int main(int argc, char** argv)
 		ofstream ofs2("pins.txt");
 
 		MazeCom_Ptr msg(MazeCom_(ifs, xml_schema::flags::dont_validate));
-		msg->AwaitMoveMessage()->board().forbidden() = positionType(0,1);
-		print(ofs, msg->AwaitMoveMessage()->board());
 		
-		vector<client::pBoardType> v;
-		c.expand_board(msg->AwaitMoveMessage()->board(), v);
+		//move by first opponent (or self if only one player)
+		vector<client::pBoardType> expand;
+		c.expand_board(msg->AwaitMoveMessage()->board(), expand);
 
-		for (int i = 0; i < v.size(); ++i)
+		//move by following opponents
+		for (int j = 1; j < 4; ++j)
 		{
-			print(ofs, *v[i]);
-			ofs << "\n///////////////////////////////////////////////////\n";
+			vector<client::pBoardType> expand_next;
+			srand(time(NULL));
+			for (int k = 0; k < expand.size(); k += 4)
+			{
+				int offset = rand()%4;
+				c.expand_board(*expand[k + offset], expand_next);
+			}
+			expand.swap(expand_next);
+			expand_next.clear();
 		}
 
-		vector<client::pBoardType> s;
-		c.expand_pin_positions(msg->AwaitMoveMessage()->board(), msg->AwaitMoveMessage()->treasure(), s);
-		print(ofs2, msg->AwaitMoveMessage()->board());
-		for (int i = 0; i < s.size(); ++i)
+		int numDouble = 0;
+		for (vector<client::pBoardType>::iterator it = expand.begin(); it != expand.end(); ++it)
 		{
-			positionType pos;
-			c.find_player(*s[i], pos);
-			ofs2 << "(" << pos.col() << "," << pos.row() << ")" << endl;
+			cout << it - expand.begin() << " " << numDouble << endl;
+			if (std::find(vector<client::pBoardType>::iterator(it) + 1, expand.end(), *it) != expand.end())
+			{
+				
+				numDouble++;
+			}
 		}
+
+
+		//MoveMessageType moveMsg(positionType(0,0), positionType(0,0), cardType());
+		//c.find_next_move(*msg->AwaitMoveMessage(), moveMsg);
 	}
 	catch (xml_schema::expected_element& e)
 	{
