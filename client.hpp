@@ -1,16 +1,21 @@
+/*
+* class client
+* responsible for:
+* communication with server
+* AI of the game
+*/
+
 #ifndef CLIENT_HPP
 #define CLIENT_HPP
 
 #include <string>
 #include <fstream>
 #include <memory>
-#include <vector>
-#include <set>
 
 #include "boost/asio.hpp"
-#include "boost/bind.hpp"
 
 #include "mazeCom_.hpp"
+#include "board.hpp"
 
 using namespace std;
 
@@ -22,63 +27,31 @@ typedef std::auto_ptr<MazeCom> MazeCom_Ptr;
 class client 
 {	
 public:
-	struct positionComp 
-	{
-		bool operator()(const positionType& p1, const positionType& p2)
-		{
-			if (p1.row() < p2.row()) 
-			{
-				return true;
-			}
-			else if (p1.row() == p2.row()) 
-			{
-				if (p1.col() < p2.col())
-				{
-					return true;
-				}
-			}
-			return false;
-		}
-	};
-
-	static std::ofstream log;	
-
-	typedef shared_ptr<boardType> pBoardType;
+	//log for messages, only works after login
+	static std::ofstream log;
 private:
 	io_service io_service_;
 	tcp::socket socket_;
 	MazeCom::id_type id_;
 
-	client(const client&);
-	client& operator=(const client&);
-
 public:
-	
+	int id() const;
 
-	//connect
+	//ctor, connects to server
 	client(const string& ip, const string& port);
 
-	//blocking send and recv
+	//blocking send
 	void send(const MazeCom& msg);
+	//blocking receive, returns msg if type fits, throws msg if type doesn't fit
 	MazeCom_Ptr recv(MazeComType type);
 
-	//start game
 	void login(string& name);
 	void play();
 
-//private:
-	void find_player(const boardType&, positionType&);
-	void find_player(const boardType&, int id, positionType&);
+private:
 	void find_next_move(const AwaitMoveMessageType&, MoveMessageType&);
-	void expand_board(const boardType&, vector<pBoardType>&); //all possible shift results
-	bool expand_pin_positions(const boardType&, const treasureType&, vector<pBoardType>&); //all possible pin positions without shifting
-
-	//help functions
-	void rotate(cardType&);
-	void shift(boardType&, const positionType&, const cardType&);
-	int count_freedom_opponents(const boardType&, const AwaitMoveMessageType::treasuresToGo_sequence&);
-	bool can_reach(const boardType&, const treasureType&);
-	positionType opposite(const positionType&);
+	//weighted possible movement of all opponents, used for determining quality of moves
+	int count_freedom_opponents(const Board&, const vector<int>&);
 };
 
 

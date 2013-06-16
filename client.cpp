@@ -1,3 +1,14 @@
+/*
+* class client
+* responsible for:
+* communication with server
+* AI of the game
+*/
+
+#include "boost/date_time/posix_time/posix_time.hpp"
+#include "boost/asio.hpp"
+#include "boost/math/special_functions.hpp"
+
 #include "client.hpp"
 
 #include <sstream>
@@ -6,18 +17,14 @@
 #include <vector>
 #include <memory>
 #include <queue>
-
-#include "boost/math/special_functions.hpp"
+#include <omp.h>
 
 using namespace std;
 
 namespace asio = boost::asio;
-
 using asio::ip::tcp;
 
-
-
-std::ofstream client::log("log.txt");
+ofstream client::log;
 
 client::client(const string& host, const string& port)
 	: 	io_service_(), socket_(io_service_)
@@ -28,7 +35,7 @@ client::client(const string& host, const string& port)
 	boost::asio::connect(socket_, it);
 	io_service_.run();
 
-	id_ = 1; //set to one for debugging, real id is assigned on login
+	id_ = 2; //set to one for debugging, real id is assigned on login
 }
 
 void client::send(const MazeCom& msg)
@@ -37,7 +44,8 @@ void client::send(const MazeCom& msg)
 	MazeCom_(serializationStream, msg);
 	string serializedMsg(serializationStream.str());
 
-	log << "sent:\n" << serializedMsg;
+	if (log.is_open())
+		log << "sent (" << id_ <<"):\n" << serializedMsg << "\n";
 
 	int msgLength = serializedMsg.length();
 	asio::write(socket_, asio::buffer(&msgLength, 4));
@@ -69,9 +77,12 @@ MazeCom_Ptr client::recv(MazeComType type)
 	}
 
 	delete[] buf;
-	
-	string dbg(ss.str());
-	log << "recved:\n" << dbg << std::endl;
+
+	if (log.is_open())
+	{
+		string dbg(ss.str());	
+		log << "recved (" << id_ <<"):\n" << dbg << std::endl;
+	}
 
 	MazeCom_Ptr msg(MazeCom_(ss, xml_schema::flags::dont_validate));
 
@@ -95,32 +106,39 @@ void client::login(string& name)
 	//wait for reply
 	MazeCom_Ptr r(client::recv(MazeComType::LOGINREPLY));
 	id_ = r->id();
+
+	stringstream logname("log");
+	logname << id_ << ".txt";
+	client::log.open(logname.str());
 }
 
 void client::play()
 {
-	MazeCom_Ptr moveRequest(recv(MazeComType::AWAITMOVE));
+	while (true)
+	{
+		MazeCom_Ptr moveRequest(recv(MazeComType::AWAITMOVE));
 	
-	//calculate move
-	//TODO algorithm
-	//just make any move to check communication
-	AwaitMoveMessageType content = *moveRequest->AwaitMoveMessage();
-	cardType card = content.board().shiftCard();
-	positionType pinPos;
-	find_player(content.board(), pinPos);
-	positionType movePos(0,1);
+		//calculate move
+		AwaitMoveMessageType content = *moveRequest->AwaitMoveMessage();
+		MoveMessageType moveMsg(positionType(0,0), positionType(0,0), content.board().shiftCard());
+		find_next_move(content, moveMsg);
 
-	//mock move (don't change pin position, don't turn card, move the first column)
-	MoveMessageType moveMsg(movePos, pinPos, card);
-	
-	//send move
-	MazeCom msg(MazeComType::MOVE, id_);
-	msg.MoveMessage(moveMsg);
-	send(msg);
+		//boost::asio::deadline_timer t(io_service_, boost::posix_time::seconds(10));
+		//t.wait();
 
-	//await reply, end
-	MazeCom_Ptr accept(recv(MazeComType::ACCEPT));
-	std::cout << *accept;
+		//send move
+		MazeCom msg(MazeComType::MOVE, id_);
+		msg.MoveMessage(moveMsg);
+		send(msg);
+
+		//await reply, end
+		MazeCom_Ptr accept(recv(MazeComType::ACCEPT));
+	}
+}
+
+int client::id() const
+{
+	return id_;
 }
 
 void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessageType& moveMsg) 
@@ -131,501 +149,245 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 	if treasure is reachable in this round:
 		choose move that most limits opponents movements
 	else 
-		play one more round (one shift for each player), try to cover as many boards as possible (choose positions/orientation of shift card randomly)
+		play one more round (one shift for each player), try to cover as many boards as possible (choose positions/orientation of shift card with smaller distance from target first)
 		choose move in this round that leads to hightest number of possibilities to reach the treasure next round
 	end
 	*/
 
-	//number of positions all opponents can do, weighted by the treasures they still need to find (limiting better players is more important)
-	int minFreedom = INT_MAX;
+	struct solution
+	{
+		Coord pinPos, shiftPos;
+		Card shiftCard;
+	} solution;
+
+	//get content out of msg
+	Board board(awaitMoveMsg.board());
+	Treasure treasure = Card::conv(awaitMoveMsg.treasure());
 
 	int numPlayers = awaitMoveMsg.treasuresToGo().size();
-	vector<pBoardType> possibleBoards;
-	expand_board(awaitMoveMsg.board(), possibleBoards);
-
-	vector<pBoardType> possibleBoardsAndPositions;
-
-	for (int i = 0; i < possibleBoards.size(); ++i)
+	vector<int> treasuresToGo(5, -1); //vector of number of treasures for each player, players that are not playing get -1, index in vector is same as id of player (element 0 not used)
+	for (int i = 1; i <= 4; ++i)
 	{
-		vector<pBoardType> possiblePositions;
+		for (size_t j = 0; j < awaitMoveMsg.treasuresToGo().size(); ++j)
+		{
+			if (awaitMoveMsg.treasuresToGo()[j].player() == i)
+			{
+				treasuresToGo[i] = awaitMoveMsg.treasuresToGo()[j].treasures();
+			}
+		}
+	}
 
-		if (expand_pin_positions(*possibleBoards[i], awaitMoveMsg.treasure(), possiblePositions)) //treasure is reachable on this board
-		{			
-			//determine sum of possible movements for opponents
-			int freedom = count_freedom_opponents(*possibleBoards[i], awaitMoveMsg.treasuresToGo());
+	Coord playerPos = board.find_player(id_);
+
+	int minFreedom = INT_MAX; //minimum possible movement of opponents for each move you make
+
+	vector<Board::ptr> possibleBoards;
+	board.expand_shifts(possibleBoards);
+
+	for (size_t i = 0; i < possibleBoards.size(); ++i)
+	{		
+		vector<Coord> possiblePositions;
+		possibleBoards[i]->expand_positions(id_, possiblePositions);
+
+		//check all reachable positions for target
+		bool canReachTreasure = false;
+		Coord treasurePos;
+		for (size_t j = 0; j < possiblePositions.size(); j++)
+		{
+			if (possibleBoards[i]->card_at(possiblePositions[j])._t == treasure)
+			{
+				canReachTreasure = true;
+				treasurePos = possiblePositions[j];
+			}
+		}
+
+		if (canReachTreasure)
+		{
+			int freedom = count_freedom_opponents(*possibleBoards[i], treasuresToGo);
 
 			if (freedom < minFreedom) 
 			{
+				//save solution if better than previous
 				minFreedom = freedom;
 
-				positionType shiftPos, pinPos;
-				cardType shiftCard;
-			
-				shiftPos = opposite(*possiblePositions[i]->forbidden());
-				find_player(*possiblePositions[i], pinPos);
-				shiftCard = possiblePositions[i]->row()[shiftPos.row()].col()[shiftPos.col()];
+				solution.shiftPos = possibleBoards[i]->_forbidden.opposite();
+				solution.shiftCard = possibleBoards[i]->card_at(solution.shiftPos);
 
-				moveMsg.shiftPosition() = shiftPos;
-				moveMsg.newPinPos() = pinPos;
-				moveMsg.shiftCard() = shiftCard;
-			}
-		}
-		else //treasure is not reachable in this board, insert boards with possible pin positions into vector for further examination
-		{
-			//only copy if solution hasn't already been found
-			if (minFreedom == INT_MAX)
-			{
-				possibleBoardsAndPositions.insert(possibleBoardsAndPositions.end(), possiblePositions.begin(), possiblePositions.end());
+				solution.shiftCard._op[P1] = false; //the card might contain pins
+				solution.shiftCard._op[P2] = false;
+				solution.shiftCard._op[P3] = false;
+				solution.shiftCard._op[P4] = false;
+
+				solution.pinPos = treasurePos;				
 			}
 		}
 	}
 
-	if (minFreedom < INT_MAX) 
+	if (minFreedom < INT_MAX) //solution found that reaches the target
 	{
-		return; //solution has been found, move is already in moveMsg
+		//build msg
+		moveMsg.shiftPosition() = positionType(solution.shiftPos.row, solution.shiftPos.col);
+		moveMsg.newPinPos() = positionType(solution.pinPos.row, solution.pinPos.col);
+		moveMsg.shiftCard() = (cardType)solution.shiftCard;
+
+		return;
 	}
 
-	//determine next round
-	int maxCount = 0;
+	// solution found that reaches the target : calculate next round
+	int maxCount = 0; //maximum of possible boards after the next round where target is reachable
+	int minAvgDistance = INT_MAX; //minimum average distance from target after the next round, checked after maxCount
 
-	for (int i = 0; i < possibleBoardsAndPositions.size(); i++)
+	//select boards for further examination (can't check every board, so number of boards is reduced to probably useful moves)
+	possibleBoards.clear();
+	board.expand_beneficial_default_shifts(id_, possibleBoards);
+
+	//create board for every possible position
+	vector<Board::ptr> possibleBoardsAndPositions;
+	for (size_t i = 0; i < possibleBoards.size(); ++i)
 	{
-		//move by first opponent (or self if only one player)
-		vector<pBoardType> expand;
-		expand_board(*possibleBoardsAndPositions[i], expand);
+		vector<Coord> positions;
+		possibleBoards[i]->expand_positions(id_, positions);
 
-		//move by following opponents
-		for (int j = 1; j < numPlayers; ++j)
+		for (size_t j = 0; j < positions.size(); ++j)
 		{
-			vector<pBoardType> expand_next;
-			srand(time(NULL));
-			for (int k = 0; k < expand.size(); k += 4)
-			{
-				int offset = rand()%4;
-				expand_board(*expand[k + offset], expand_next);
-			}
-			expand.swap(expand_next);
-			expand_next.clear();
-		}
+			Board::ptr copy(new Board(*possibleBoards[i]));
 
-		//check number of boards that can reach the treasure
-		int count = 0;
-		for (int j = 0; j < expand.size(); ++j)
-		{
-			if (can_reach(*expand[i], awaitMoveMsg.treasure()))
-			{
-				++count;
-			}
-		}
+			copy->card_at(playerPos)._op[id_ - 1] = false; 
+			copy->card_at(positions[j])._op[id_ - 1] = true;
 
-		//if new best result: set move message
-		if (count > maxCount) 
-		{
-			positionType shiftPos, pinPos;
-			cardType shiftCard;
-			
-			shiftPos = opposite(*possibleBoardsAndPositions[i]->forbidden());
-			find_player(*possibleBoardsAndPositions[i], pinPos);
-			shiftCard = possibleBoardsAndPositions[i]->row()[shiftPos.row()].col()[shiftPos.col()];
-
-			moveMsg.shiftPosition() = shiftPos;
-			moveMsg.newPinPos() = pinPos;
-			moveMsg.shiftCard() = shiftCard;
+			possibleBoardsAndPositions.push_back(copy);
 		}
 	}
+
+	//sort boards for ascending distance from target
+	std::sort(
+		possibleBoardsAndPositions.begin(), 
+		possibleBoardsAndPositions.end(), 
+		[this, treasure] (Board::ptr& a, Board::ptr& b) 
+		{
+			Coord aT, aP, bT, bP;
+			aP = a->find_player(id_);
+			bP = b->find_player(id_);
+			aT = a->find_treasure(treasure);
+			bT = b->find_treasure(treasure);
+
+			if (abs(aT.row - aP.row) + abs(aT.col - aP.col) < abs(bT.row - bP.row) + abs(bT.col - bP.col)) return true;
+			return false;
+		});
+
+	double begin = omp_get_wtime();
+
+	//for every board
+	//	do probable moves for every opponent
+	//	do move for player
+	//	check distance from target/count number of possible boards where target is reachable
+	#pragma omp parallel num_threads(4)
+	{
+		for (int i = omp_get_thread_num(); i < possibleBoardsAndPositions.size(); i+= omp_get_num_threads())
+		{
+			if (omp_get_wtime() - begin > 15) continue;
+
+			vector<Board::ptr> expand;
+			expand.push_back(possibleBoardsAndPositions[i]);
+
+			//moves by opponents
+			for (int j = 1; j <= 4; ++j)
+			{
+				if (j == id_ || treasuresToGo[j] < 0) //dont do move for opponents that are not playing and the player himself
+				{
+					continue;
+				}
+
+				vector<Board::ptr> expand_next;
+				for (size_t k = 0; k < expand.size(); ++k)
+				{
+					expand[k]->expand_beneficial_default_shifts(j, expand_next);
+				}
+				expand.swap(expand_next);
+				expand_next.clear();
+			}
+
+			//move by player
+			vector<Board::ptr> expand_own_move;
+			for (size_t j = 0; j < expand.size(); ++j)
+			{
+				expand[j]->expand_default_shifts(expand_own_move);
+			}
+
+			//check number of boards that can reach the treasure
+			int count = 0;
+			int sumDistance = 0, avgDistance;
+			for (size_t j = 0; j < expand_own_move.size(); ++j)
+			{
+				int distanceFromTreasure = expand_own_move[j]->can_reach(id_, treasure);
+				if (distanceFromTreasure == 0)
+				{
+					++count;
+				}
+
+				sumDistance += distanceFromTreasure;
+			}
+			avgDistance = sumDistance / expand_own_move.size();
+
+			#pragma omp critical
+			{
+				//if new best result: set move message
+				//if (avgDistance < minAvgDistance)
+				if ((count > maxCount) || (count == maxCount && avgDistance < minAvgDistance))
+				{
+					maxCount  = count;
+					minAvgDistance = avgDistance;
+
+					//extract solution from board
+					solution.shiftPos = possibleBoardsAndPositions[i]->_forbidden.opposite();
+					solution.shiftCard = possibleBoardsAndPositions[i]->card_at(solution.shiftPos);
+					solution.shiftCard._op[P1] = false; //the card might contain pins because it is extracted from the board after the shift, 
+					solution.shiftCard._op[P2] = false; //but cards with pins as shift card are not accepted
+					solution.shiftCard._op[P3] = false;
+					solution.shiftCard._op[P4] = false;
+					solution.pinPos = possibleBoardsAndPositions[i]->find_player(id_);			
+				}
+			}
+		}
+	}
+
+	//fill move message
+	moveMsg.shiftPosition() = positionType(solution.shiftPos.row, solution.shiftPos.col);
+	moveMsg.newPinPos() = positionType(solution.pinPos.row, solution.pinPos.col);
+	moveMsg.shiftCard() = (cardType)solution.shiftCard;
 }
 
-void client::expand_board(const boardType& parent, vector<pBoardType>& children)
+int client::count_freedom_opponents(const Board& board, const vector<int>& treasuresToGo)
 {
-	positionType shiftPos(0,0);
-	for ( ; shiftPos.row() < 7; ++shiftPos.row()) 
-	{
-		int start, step;
-
-		if (shiftPos.row() % 6 == 0) //first and last row: try every second column
-		{
-			start = 1;
-			step = 2;
-		} 
-		else if (shiftPos.row() % 2 == 1) //every uneven row: try first and last column
-		{
-			start = 0;
-			step = 6;
-		}
-		else 
-		{
-			start = 7; //other rows: don't try anything
-		}
-
-		for (shiftPos.col() = start; shiftPos.col() < 7; shiftPos.col() += step) 
-		{
-			if (parent.forbidden().present() && *parent.forbidden() == shiftPos)
-			{
-				continue;
-			}
-
-			cardType shiftCard(parent.shiftCard());
-			int nPossibleOrientations;
-			if ((shiftCard.openings().top() && shiftCard.openings().bottom() && !shiftCard.openings().left() && !shiftCard.openings().right()) || 
-				(!shiftCard.openings().top() && !shiftCard.openings().bottom() && shiftCard.openings().left() && shiftCard.openings().right()))
-			{
-				nPossibleOrientations = 2;
-			} 
-			else
-			{
-				nPossibleOrientations = 4;
-			}
-
-			for (int rotation = 0; rotation < nPossibleOrientations; ++rotation)
-			{
-				rotate(shiftCard);
-				pBoardType newBoard(new boardType(parent));
-				shift(*newBoard, shiftPos, shiftCard);
-				children.push_back(newBoard);
-			}
-		}
-	}
-}
-
-bool client::expand_pin_positions(const boardType& board, const treasureType& treasure, vector<pBoardType>& children)
-{
-	positionType playerPos;
-	find_player(board, playerPos);
-
-	queue<positionType, deque<positionType>> queue;
-	queue.push(playerPos);
-	set<positionType, positionComp> used;
-
-	while (!queue.empty()) 
-	{
-		positionType curPos = queue.front();
-		queue.pop();
-
-		if (used.find(curPos) == used.end()) 
-		{
-			//copy board
-			pBoardType b(new boardType(board));
-
-			//remove player pin from player position
-			cardType* oldPosCard = &b->row()[playerPos.row()].col()[playerPos.col()];
-			for (pin::playerID_iterator pin = oldPosCard->pin().playerID().begin(); pin < oldPosCard->pin().playerID().end(); ++pin)
-			{
-				if (*pin == id_)
-				{
-					oldPosCard->pin().playerID().erase(pin);
-					break;
-				}
-			}
-
-			//add player pin to current position
-			cardType* curPosCard = &b->row()[curPos.row()].col()[curPos.col()];
-			curPosCard->pin().playerID().push_back(id_);
-
-			//if treasure is found, delete all other expanded boards, add current board and return
-			if (curPosCard->treasure().present() && *curPosCard->treasure() == treasure)
-			{
-				children.clear();
-				children.push_back(b);
-				return true;
-			}
-
-			//add board to children
-			children.push_back(b);
-
-			//mark position as used to not expand it again
-			used.insert(curPos);
-
-			//check/enqueue neighbords
-			openings o = board.row()[curPos.row()].col()[curPos.col()].openings();
-
-			if (o.top() && curPos.row() > 0)
-			{
-				positionType neighbor(curPos.row() - 1, curPos.col());
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().bottom())
-				{
-					queue.push(neighbor);
-				}
-			}
-
-			if (o.bottom() && curPos.row() < 6)
-			{
-				positionType neighbor(curPos.row() + 1, curPos.col());
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().top())
-				{
-					queue.push(neighbor);
-				}
-			}
-
-			if (o.right() && curPos.col() < 6)
-			{
-				positionType neighbor(curPos.row(), curPos.col() + 1);
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().left())
-				{
-					queue.push(neighbor);
-				}
-			}
-
-			if (o.left() && curPos.col() > 0)
-			{
-				positionType neighbor(curPos.row(), curPos.col() - 1);
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().right())
-				{
-					queue.push(neighbor);
-				}
-			}
-		}
-	}
-
-	return false;
-}
-
-void client::shift(boardType& board, const positionType& shiftPos, const cardType& shiftCard) 
-{
-	board.forbidden() = opposite(shiftPos);
-
-	//card at position that is forbidden in next move is new shift card
-	board.shiftCard() = board.row()[board.forbidden()->row()].col()[board.forbidden()->col()];	
-
-	//direction of shift (left to right or top to bottom is 1, right to left or bottom to top is -1)
-	int direction = -1 * boost::math::sign(shiftPos.col() + shiftPos.row() - 6); 
-
-	//shift cards on the board (descending i so no temporary objects are needed)
-	for (int i = 6; i >= 1; --i) 
-	{
-		positionType newPos, oldPos;
-					
-		newPos.col() = shiftPos.col() + direction * i * (shiftPos.row() % 2);
-		newPos.row() = shiftPos.row() + direction * i * (shiftPos.col() % 2);
-		oldPos.col() = shiftPos.col() + direction * (i - 1) * (shiftPos.row() % 2);
-		oldPos.row() = shiftPos.row() + direction * (i - 1) * (shiftPos.col() % 2);
-
-		board.row()[newPos.row()].col()[newPos.col()] = board.row()[oldPos.row()].col()[oldPos.col()];
-	}
-
-	//set given shift card at shift position
-	board.row()[shiftPos.row()].col()[shiftPos.col()] = shiftCard;
-
-	//switch all pins from new shift card to shift position
-	board.row()[shiftPos.row()].col()[shiftPos.col()].pin().playerID().insert(
-		board.row()[shiftPos.row()].col()[shiftPos.col()].pin().playerID().begin(),
-		board.shiftCard().pin().playerID().begin(),
-		board.shiftCard().pin().playerID().end());
-	board.shiftCard().pin().playerID().clear();
-}
-
-int client::count_freedom_opponents(const boardType& board, const AwaitMoveMessageType::treasuresToGo_sequence& treasuresToGo)
-{
-	if (treasuresToGo.size() == 0)
-	{
-		return INT_MAX;
-	}
-
+	//sum of all treasures of opponents
 	int sumTreasures = 1; //sum one greater than actual sum so result is not always zero with one opponent
-	for (AwaitMoveMessageType::treasuresToGo_const_iterator player = treasuresToGo.begin(); player != treasuresToGo.end(); ++player)
+	for (size_t id = 1; id <= 4; id++)
 	{
-		if (player->player() != id_)
+		if (id != id_ && treasuresToGo[id] >= 0)
 		{
-			sumTreasures += player->treasures();
+			sumTreasures += treasuresToGo[id];
 		}
 	}
 
 	int sumFreedom = 0;
 
-	for (AwaitMoveMessageType::treasuresToGo_const_iterator player = treasuresToGo.begin(); player != treasuresToGo.end(); ++player)
+	//for every player:
+	//get number of possible positions
+	//weigh by treasures to go
+	for (size_t id = 1; id <= 4; id++)
 	{
-		int id = player->player();
-		int numTreasures = player->treasures();
-		int numPositions = 0;
+		if (id == id_ || treasuresToGo[id] < 0) continue;
 
-		if (id == id_)
-		{
-			continue;
-		}
+		vector<Coord> positions;
+		board.expand_positions(id, positions);
 
-		//count possible positions of the player using breadth first search
-		positionType playerPos;
-		find_player(board, id, playerPos);
+		int numTreasures = treasuresToGo[id];
+		int numPositions = positions.size();
 
-		queue<positionType, deque<positionType>> queue;
-		queue.push(playerPos);
-		set<positionType, positionComp> used;
-
-		while (!queue.empty()) 
-		{
-			positionType curPos = queue.front();
-			queue.pop();
-
-			if (used.find(curPos) == used.end()) 
-			{
-				++numPositions;
-
-				//mark position as used to not expand it again
-				used.insert(curPos);
-
-				//check/enqueue neighbords
-				openings o = board.row()[curPos.row()].col()[curPos.col()].openings();
-
-				if (o.top() && curPos.row() > 0)
-				{
-					positionType neighbor(curPos.row() - 1, curPos.col());
-					if (board.row()[neighbor.row()].col()[neighbor.col()].openings().bottom())
-					{
-						queue.push(neighbor);
-					}
-				}
-
-				if (o.bottom() && curPos.row() < 6)
-				{
-					positionType neighbor(curPos.row() + 1, curPos.col());
-					if (board.row()[neighbor.row()].col()[neighbor.col()].openings().top())
-					{
-						queue.push(neighbor);
-					}
-				}
-
-				if (o.right() && curPos.col() < 6)
-				{
-					positionType neighbor(curPos.row(), curPos.col() + 1);
-					if (board.row()[neighbor.row()].col()[neighbor.col()].openings().left())
-					{
-						queue.push(neighbor);
-					}
-				}
-
-				if (o.left() && curPos.col() > 0)
-				{
-					positionType neighbor(curPos.row(), curPos.col() - 1);
-					if (board.row()[neighbor.row()].col()[neighbor.col()].openings().right())
-					{
-						queue.push(neighbor);
-					}
-				}
-			}
-		}
-
-		sumFreedom += (sumTreasures - numTreasures) * numPositions;
+		sumFreedom += (sumTreasures - numTreasures) * numPositions; //opponents with lower treasures to go are weighed higher
 	}
 
 	return sumFreedom;
-}
-
-void client::find_player(const boardType& b, positionType& p) 
-{
-	find_player(b, id_, p);
-}
-
-void client::find_player(const boardType& b, int id, positionType& p)
-{
-	p = positionType(0, 0);
-	for (boardType::row_const_iterator row_it = b.row().begin(); row_it < b.row().end(); row_it++)
-	{				
-		p.col() = 0;
-		for (boardType::row_type::col_const_iterator col_it = row_it->col().begin(); col_it < row_it->col().end(); col_it++)
-		{			
-			if (std::find(col_it->pin().playerID().begin(), col_it->pin().playerID().end(), id) != col_it->pin().playerID().end())
-			{
-				return;
-			}
-			p.col() += 1;
-		}
-		p.row() += 1;
-	}
-}
-
-bool client::can_reach(const boardType& board, const treasureType& t)
-{
-	positionType playerPos;
-	find_player(board, playerPos);
-
-	queue<positionType, deque<positionType>> queue;
-	set<positionType, positionComp> used;
-
-	queue.push(playerPos);
-
-		while (!queue.empty()) 
-	{
-		positionType curPos = queue.front();
-		queue.pop();
-
-		if (used.find(curPos) == used.end()) 
-		{
-			//mark position as used to not expand it again
-			used.insert(curPos);
-
-			//if treasure is found, delete all other expanded boards, add current board and return
-			if (board.row()[curPos.row()].col()[curPos.col()].treasure().present() && *board.row()[curPos.row()].col()[curPos.col()].treasure() == t)
-			{
-				return true;
-			}
-			
-			//check/enqueue neighbords
-			openings o = board.row()[curPos.row()].col()[curPos.col()].openings();
-
-			if (o.top() && curPos.row() > 0)
-			{
-				positionType neighbor(curPos.row() - 1, curPos.col());
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().bottom())
-				{
-					queue.push(neighbor);
-				}
-			}
-
-			if (o.bottom() && curPos.row() < 6)
-			{
-				positionType neighbor(curPos.row() + 1, curPos.col());
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().top())
-				{
-					queue.push(neighbor);
-				}
-			}
-
-			if (o.right() && curPos.col() < 6)
-			{
-				positionType neighbor(curPos.row(), curPos.col() + 1);
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().left())
-				{
-					queue.push(neighbor);
-				}
-			}
-
-			if (o.left() && curPos.col() > 0)
-			{
-				positionType neighbor(curPos.row(), curPos.col() - 1);
-				if (board.row()[neighbor.row()].col()[neighbor.col()].openings().right())
-				{
-					queue.push(neighbor);
-				}
-			}
-		}
-	}
-
-	return false;
-}
-
-positionType client::opposite(const positionType& pos)
-{
-	assert((pos.row() % 6 == 0 && pos.col() % 2 == 1) || (pos.col() % 6 == 0 && pos.row() % 2 == 1)); // position is valid shift
-
-	positionType oppPos(pos);
-	if (pos.col() % 6 == 0)
-	{
-		oppPos.col() = abs(oppPos.col() - 6);
-	}
-	else 
-	{
-		oppPos.row() = abs(oppPos.row() - 6);
-	}
-
-	return oppPos;
-}
-
-void client::rotate(cardType& card) 
-{
-	bool tmp = card.openings().top();
-	card.openings().top() = card.openings().left();
-	card.openings().left() = card.openings().bottom();
-	card.openings().bottom() = card.openings().right();
-	card.openings().right() = tmp;
 }
 
 void print(ostream& os, boardType& b)

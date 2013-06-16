@@ -1,11 +1,27 @@
+/*
+* main program for mazenet client
+*
+* dependant on: 
+* code synthesis xsd for data binding
+* boost asio/system for socket communication
+* some other boost header only libraries
+* C++11
+* OpenMP recommended for speed, OpenMP header required for timeout
+*
+* mazenet server not included
+*/
+
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <omp.h>
+#include <bitset>
 
 #include "boost/asio.hpp"
 
 #include "mazeCom_.hpp"
 #include "client.hpp"
+#include "board.hpp"
 
 using std::string;
 using std::cout;
@@ -25,66 +41,54 @@ int main(int argc, char** argv)
 		//debug
 		host = "localhost";
 		port = "5123";
-	}
-
-	client c(host, port);
-	//c.login(string("c"));
-
-	/*client d(host, port);
-	d.login(string("d"));
+	}	
 
 	try
 	{
+		client c(host, port);
+		srand(time(NULL));
+
+		string name;
+		cout << "enter name:" << endl;
+		cin >> name;
+		c.login(name);
 		c.play();
-	}
-	catch (xml_schema::expected_element& e)
-	{
-		cout << e.what() << ": " << e.name() << endl;
-	}*/
-
-	try
-	{
-		std::ifstream ifs("board.txt");
-		ofstream ofs("boards.txt");
-		ofstream ofs2("pins.txt");
-
-		MazeCom_Ptr msg(MazeCom_(ifs, xml_schema::flags::dont_validate));
 		
-		//move by first opponent (or self if only one player)
-		vector<client::pBoardType> expand;
-		c.expand_board(msg->AwaitMoveMessage()->board(), expand);
+		//test the algorithm with a presaved board
+		/*std::ifstream ifs("board.txt");
+		MazeCom_Ptr msg(MazeCom_(ifs, xml_schema::flags::dont_validate));
+		Board b(msg->AwaitMoveMessage()->board());
 
-		//move by following opponents
-		for (int j = 1; j < 4; ++j)
-		{
-			vector<client::pBoardType> expand_next;
-			srand(time(NULL));
-			for (int k = 0; k < expand.size(); k += 4)
-			{
-				int offset = rand()%4;
-				c.expand_board(*expand[k + offset], expand_next);
-			}
-			expand.swap(expand_next);
-			expand_next.clear();
-		}
+		cout << b << endl << endl;
 
-		int numDouble = 0;
-		for (vector<client::pBoardType>::iterator it = expand.begin(); it != expand.end(); ++it)
-		{
-			cout << it - expand.begin() << " " << numDouble << endl;
-			if (std::find(vector<client::pBoardType>::iterator(it) + 1, expand.end(), *it) != expand.end())
-			{
-				
-				numDouble++;
-			}
-		}
+		double begin = omp_get_wtime();
 
+		MoveMessageType moveMsg(positionType(0,0), positionType(0,0), cardType());
+		c.find_next_move(*msg->AwaitMoveMessage(), moveMsg);
 
-		//MoveMessageType moveMsg(positionType(0,0), positionType(0,0), cardType());
-		//c.find_next_move(*msg->AwaitMoveMessage(), moveMsg);
+		cout << omp_get_wtime() - begin << endl;		
+
+		b.shift(Coord(moveMsg.shiftPosition()), Card(moveMsg.shiftCard()));
+
+		cout << b << endl;
+		cout << "(" << moveMsg.newPinPos().row() << "," << moveMsg.newPinPos().col() << ")" << endl;*/
+		
 	}
-	catch (xml_schema::expected_element& e)
+	catch (MazeCom_Ptr& unexpected)
 	{
-		cout << e.what() << ": " << e.name() << endl;
+		switch ((MazeComType::value)unexpected->mcType())
+		{
+		case MazeComType::WIN:
+			cout << "winner:" << unexpected->WinMessage()->winner() << endl;
+			break;
+		}
+	} 
+	catch (boost::system::system_error e)
+	{
+		cout << e.what() << endl;
+	}
+	catch (runtime_error e)
+	{
+		cout << e.what() << endl;
 	}
 }

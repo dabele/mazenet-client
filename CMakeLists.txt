@@ -21,7 +21,7 @@ if(XSD_RETURN)
 endif(XSD_RETURN)
 include_directories(${CMAKE_BINARY_DIR})
 	
-add_executable(mazenet-client main.cpp client.hpp client.cpp mazeCom_.hpp mazeCom.hpp mazeCom.cpp)
+add_executable(mazenet-client main.cpp client.hpp client.cpp mazeCom_.hpp mazeCom.hpp mazeCom.cpp board.hpp board.cpp)
 target_link_libraries(mazenet-client debug xerces-c_3D.lib)
 target_link_libraries(mazenet-client optimized xerces-c_3.lib)
 
