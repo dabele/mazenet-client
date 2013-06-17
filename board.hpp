@@ -53,7 +53,7 @@ struct Card
 	//bits for player pins and openings
 	std::bitset<8> _op; 
 
-	Card() { }
+	Card() : _t(t0), _op(0) { }
 	Card (const cardType& c);
 	
 	void rotate();
@@ -74,7 +74,7 @@ struct Board
 
 	Coord _forbidden;
 	Card _shift;
-	Card** _card;
+	vector<vector<Card>> _card;
 
 	//default ctor, field initialized random
 	Board(); 
@@ -105,12 +105,12 @@ struct Board
 	//returns coordinates of player with id, returns -1/-1 if player not found
 	Coord find_player(int id) const;
 	//returns coordinates of treasure, returns -1/-1 if player not found	
-	Coord find_treasure(Treasure t);
+	Coord find_treasure(Treasure t) const;
 	//card at position, no range check
 	Card& card_at(const Coord& c);
 	const Card& card_at(const Coord& c) const;
 	//returns distance of position of player with id from position of treasure t (0 means treasure is reachable)
-	int can_reach(int id, Treasure t);
+	int can_reach(int id, Treasure t) const;
 };
 
 ostream& operator<<(ostream& os, const Board& b);

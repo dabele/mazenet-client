@@ -1,11 +1,11 @@
 /*
 * main program for mazenet client
 *
-* dependant on: 
+* dependencies:
 * code synthesis xsd for data binding
 * boost asio/system for socket communication
-* some other boost header only libraries
-* C++11
+* some other boost header-only libraries
+* requires C++11, tested with MSVC 10.0 and 11.0
 * OpenMP recommended for speed, OpenMP header required for timeout
 *
 * mazenet server not included
@@ -15,7 +15,6 @@
 #include <iostream>
 #include <fstream>
 #include <omp.h>
-#include <bitset>
 
 #include "boost/asio.hpp"
 
@@ -74,20 +73,34 @@ int main(int argc, char** argv)
 		cout << "(" << moveMsg.newPinPos().row() << "," << moveMsg.newPinPos().col() << ")" << endl;*/
 		
 	}
-	catch (MazeCom_Ptr& unexpected)
+	catch (MazeCom_Ptr& unexpected) //thrown if problems during game
 	{
 		switch ((MazeComType::value)unexpected->mcType())
 		{
 		case MazeComType::WIN:
 			cout << "winner:" << unexpected->WinMessage()->winner() << endl;
 			break;
+		case MazeComType::DISCONNECT:
+			cout << "disconnected:";
+			switch (unexpected->DisconnectMessage()->erroCode())
+			{
+			case ErrorType::TOO_MANY_TRIES:
+				cout << "too many tries" << endl;
+				break;
+			default:
+				cout << "unknown reason" << endl;
+				break;
+			}
+			break;
+		default:
+			cout << "unexpected message" << endl;
 		}
 	} 
-	catch (boost::system::system_error e)
+	catch (boost::system::system_error& e) //thrown if connection problems
 	{
 		cout << e.what() << endl;
 	}
-	catch (runtime_error e)
+	catch (runtime_error& e)
 	{
 		cout << e.what() << endl;
 	}

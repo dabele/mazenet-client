@@ -32,10 +32,10 @@ client::client(const string& host, const string& port)
 	tcp::resolver resolver(io_service_);
 	tcp::resolver::query query(host, port);
 	tcp::resolver::iterator it = resolver.resolve(query);
-	boost::asio::connect(socket_, it);
+	asio::connect(socket_, it);
 	io_service_.run();
 
-	id_ = 2; //set to one for debugging, real id is assigned on login
+	id_ = 2; //set to for testing, real id is assigned on login
 }
 
 void client::send(const MazeCom& msg)
@@ -45,7 +45,7 @@ void client::send(const MazeCom& msg)
 	string serializedMsg(serializationStream.str());
 
 	if (log.is_open())
-		log << "sent (" << id_ <<"):\n" << serializedMsg << "\n";
+		log << "sent:\n" << serializedMsg << "\n";
 
 	int msgLength = serializedMsg.length();
 	asio::write(socket_, asio::buffer(&msgLength, 4));
@@ -81,7 +81,7 @@ MazeCom_Ptr client::recv(MazeComType type)
 	if (log.is_open())
 	{
 		string dbg(ss.str());	
-		log << "recved (" << id_ <<"):\n" << dbg << std::endl;
+		log << "recved:\n" << dbg << std::endl;
 	}
 
 	MazeCom_Ptr msg(MazeCom_(ss, xml_schema::flags::dont_validate));
@@ -234,12 +234,8 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 	}
 
 	// solution found that reaches the target : calculate next round
-	int maxCount = 0; //maximum of possible boards after the next round where target is reachable
+	double maxRatio = 0; //maximum ratio of possible boards after the next round where target is reachable
 	int minAvgDistance = INT_MAX; //minimum average distance from target after the next round, checked after maxCount
-
-	//select boards for further examination (can't check every board, so number of boards is reduced to probably useful moves)
-	possibleBoards.clear();
-	board.expand_beneficial_default_shifts(id_, possibleBoards);
 
 	//create board for every possible position
 	vector<Board::ptr> possibleBoardsAndPositions;
@@ -263,16 +259,9 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 	std::sort(
 		possibleBoardsAndPositions.begin(), 
 		possibleBoardsAndPositions.end(), 
-		[this, treasure] (Board::ptr& a, Board::ptr& b) 
+		[this, treasure] (Board::ptr& a, Board::ptr& b) -> bool 
 		{
-			Coord aT, aP, bT, bP;
-			aP = a->find_player(id_);
-			bP = b->find_player(id_);
-			aT = a->find_treasure(treasure);
-			bT = b->find_treasure(treasure);
-
-			if (abs(aT.row - aP.row) + abs(aT.col - aP.col) < abs(bT.row - bP.row) + abs(bT.col - bP.col)) return true;
-			return false;
+			return this->distance(*a, id_, treasure) < this->distance(*b, id_, treasure);
 		});
 
 	double begin = omp_get_wtime();
@@ -280,10 +269,10 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 	//for every board
 	//	do probable moves for every opponent
 	//	do move for player
-	//	check distance from target/count number of possible boards where target is reachable
-	#pragma omp parallel num_threads(4)
+	//find board with maximum ratio of positive solutions
+	#pragma omp parallel num_threads(omp_get_num_procs()) //omp construct separated from for loop for ordered iteration, otherwise sorting is destroyed
 	{
-		for (int i = omp_get_thread_num(); i < possibleBoardsAndPositions.size(); i+= omp_get_num_threads())
+		for (size_t i = omp_get_thread_num(); i < possibleBoardsAndPositions.size(); i+= omp_get_num_threads())
 		{
 			if (omp_get_wtime() - begin > 15) continue;
 
@@ -293,7 +282,7 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 			//moves by opponents
 			for (int j = 1; j <= 4; ++j)
 			{
-				if (j == id_ || treasuresToGo[j] < 0) //dont do move for opponents that are not playing and the player himself
+				if (j == id_ || treasuresToGo[j] < 0) //dont do move for opponents that are not playing and not for the player himself
 				{
 					continue;
 				}
@@ -306,36 +295,47 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 				expand.swap(expand_next);
 				expand_next.clear();
 			}
-
-			//move by player
-			vector<Board::ptr> expand_own_move;
-			for (size_t j = 0; j < expand.size(); ++j)
-			{
-				expand[j]->expand_default_shifts(expand_own_move);
-			}
-
-			//check number of boards that can reach the treasure
+			
+			//count number of boards where the treasure is reachable with the players move
+			//calculate ratio of boards where treasure is reachable to all possible boards after opponents moves
+			double ratio = 0; 
 			int count = 0;
 			int sumDistance = 0, avgDistance;
-			for (size_t j = 0; j < expand_own_move.size(); ++j)
+
+			for (size_t j = 0; j < expand.size(); ++j)
 			{
-				int distanceFromTreasure = expand_own_move[j]->can_reach(id_, treasure);
-				if (distanceFromTreasure == 0)
+				//move by player
+				vector<Board::ptr> expand_own_move;
+				expand[j]->expand_default_shifts(expand_own_move);
+				
+				int minDistance = INT_MAX;
+
+				for (size_t j = 0; j < expand_own_move.size(); ++j)
 				{
-					++count;
+					int distanceFromTreasure = expand_own_move[j]->can_reach(id_, treasure);
+
+					if (distanceFromTreasure < minDistance)
+					{
+						minDistance = distanceFromTreasure;
+					}
+
+					if (minDistance == 0) break;
 				}
 
-				sumDistance += distanceFromTreasure;
+				sumDistance += minDistance;
+				if (minDistance == 0) count++;
 			}
-			avgDistance = sumDistance / expand_own_move.size();
+
+			ratio = (double)count / (double)expand.size();
+			avgDistance = sumDistance / expand.size();
 
 			#pragma omp critical
 			{
 				//if new best result: set move message
 				//if (avgDistance < minAvgDistance)
-				if ((count > maxCount) || (count == maxCount && avgDistance < minAvgDistance))
+				if ((ratio > maxRatio) || (ratio == maxRatio && avgDistance < minAvgDistance))
 				{
-					maxCount  = count;
+					maxRatio = ratio;
 					minAvgDistance = avgDistance;
 
 					//extract solution from board
@@ -351,10 +351,25 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 		}
 	}
 
+	cout << "max Ratio:" << maxRatio << endl;
+	cout << "min avg dist: " << minAvgDistance << endl << endl;
+
 	//fill move message
 	moveMsg.shiftPosition() = positionType(solution.shiftPos.row, solution.shiftPos.col);
 	moveMsg.newPinPos() = positionType(solution.pinPos.row, solution.pinPos.col);
 	moveMsg.shiftCard() = (cardType)solution.shiftCard;
+}
+
+int client::distance(const Board& board, int id, Treasure t)
+{
+	Coord tPos, pPos;
+	pPos = board.find_player(id);
+	tPos = board.find_treasure(t);
+
+	if (tPos.row >= 0)
+		return abs(tPos.row - pPos.row) + abs(tPos.col - pPos.col);
+	else 
+		return INT_MAX;
 }
 
 int client::count_freedom_opponents(const Board& board, const vector<int>& treasuresToGo)

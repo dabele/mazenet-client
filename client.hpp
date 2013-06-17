@@ -47,9 +47,9 @@ public:
 
 	void login(string& name);
 	void play();
-
-private:
 	void find_next_move(const AwaitMoveMessageType&, MoveMessageType&);
+	//distance of player with id to card with treasure t
+	int distance(const Board& board, int id, Treasure t);
 	//weighted possible movement of all opponents, used for determining quality of moves
 	int count_freedom_opponents(const Board&, const vector<int>&);
 };

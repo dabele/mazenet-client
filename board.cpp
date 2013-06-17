@@ -312,29 +312,26 @@ Card::operator cardType()
 //////  Board  //////
 /////////////////////
 
-Board::Board()
+Board::Board() : _card(SIZE, vector<Card>(SIZE, Card()))
 {
 	_forbidden = Coord(0,0);
 	_shift._t = t0;
 	_shift._op = std::bitset<8>(rand() % 256);
-	_card = new Card*[SIZE];
+
 	for (int i = 0; i < SIZE; ++i)
 	{
-		_card[i] = new Card[SIZE];
 		for (int j = 0; j < SIZE; ++j)
 		{
-			_card[i][j]._t = t0;
+			_card[i][j]._t = static_cast<Treasure>(rand()%29);
 			_card[i][j]._op = std::bitset<8>(rand() % 256);
 		}
 	}
 }
 
-Board::Board(const boardType& b) : _shift(b.shiftCard())
+Board::Board(const boardType& b) : _shift(b.shiftCard()), _card(SIZE, vector<Card>(SIZE, Card()))
 {
-	_card = new Card*[SIZE];
 	for (int i = 0; i < SIZE; ++i)
 	{
-		_card[i] = new Card[SIZE];
 		for (int j = 0; j < SIZE; ++j)
 		{
 			_card[i][j] = Card(b.row()[i].col()[j]);
@@ -351,38 +348,17 @@ Board::Board(const boardType& b) : _shift(b.shiftCard())
 	}
 }
 
-Board::Board(const Board& b) : _shift(b._shift), _forbidden(b._forbidden)
+Board::Board(const Board& b) : _shift(b._shift), _forbidden(b._forbidden), _card(b._card)
 {
-	_card = new Card*[SIZE];
-	for (int i = 0; i < SIZE; ++i)
-	{
-		_card[i] = new Card[SIZE];
-		for (int j = 0; j < SIZE; ++j)
-		{
-			_card[i][j] = b._card[i][j];
-		}
-	}
 }
 
 Board::~Board()
 {
-	for (int i = 0; i < SIZE; ++i)
-	{
-		delete[] _card[i];
-	}
-	delete[] _card;
 }
 
 Board& Board::operator=(const Board& b)
 {
-	for (int i = 0; i < SIZE; ++i)
-	{
-		for (int j = 0; j < SIZE; ++j)
-		{
-			_card[i][j] = b._card[i][j];
-		}
-	}
-
+	_card = b._card;
 	_forbidden = b._forbidden;
 	_shift = b._shift;
 
@@ -526,6 +502,16 @@ void Board::expand_beneficial_default_shifts(int id, vector<ptr>& children) cons
 			children.push_back(allShifts[i]);
 		}
 	}
+
+	//add some random moves to get a more significant number of boards
+	while (children.size() < 5)
+	{
+		Board::ptr r = allShifts[rand() % allShifts.size()];
+		if (std::find(children.begin(), children.end(), r)  == children.end())
+		{
+			children.push_back(r);
+		}
+	}
 }
 
 void Board::expand_beneficial_shifts(int id, vector<ptr>& children) const 
@@ -572,6 +558,16 @@ void Board::expand_beneficial_shifts(int id, vector<ptr>& children) const
 		if (beneficial)
 		{
 			children.push_back(allShifts[i]);
+		}
+	}
+	
+	//add some random moves to get a significant number of boards
+	while (children.size() < 10)
+	{
+		Board::ptr r = allShifts[rand() % allShifts.size()];
+		if (std::find(children.begin(), children.end(), r)  == children.end())
+		{
+			children.push_back(r);
 		}
 	}
 }
@@ -692,7 +688,7 @@ Coord Board::find_player(int id) const
 	return Coord(-1,-1);
 }
 
-Coord Board::find_treasure(Treasure t)
+Coord Board::find_treasure(Treasure t) const
 {
 	for (int i = 0; i < SIZE; ++i)
 	{
@@ -718,7 +714,7 @@ const Card& Board::card_at(const Coord& c) const
 	return _card[c.row][c.col];
 }
 
-int Board::can_reach(int id, Treasure t)
+int Board::can_reach(int id, Treasure t) const
 {
 	vector<Coord> positions;
 	expand_positions(id, positions);
