@@ -7,6 +7,7 @@
 
 #include "boost/date_time/posix_time/posix_time.hpp"
 #include "boost/asio.hpp"
+#include "boost/bind.hpp"
 #include "boost/math/special_functions.hpp"
 
 #include "client.hpp"
@@ -23,122 +24,164 @@ using namespace std;
 
 namespace asio = boost::asio;
 using asio::ip::tcp;
+using asio::placeholders::error;
+using asio::placeholders::bytes_transferred;
 
 ofstream client::log;
 
-client::client(const string& host, const string& port)
-	: 	io_service_(), socket_(io_service_)
+client::client(const string& host, const string& port) : _ios(), _socket(_ios) //throws boost::system::system_error
 {
-	tcp::resolver resolver(io_service_);
-	tcp::resolver::query query(host, port);
-	tcp::resolver::iterator it = resolver.resolve(query);
-	asio::connect(socket_, it);
-	io_service_.run();
+	tcp::resolver rslv(_ios);
+	tcp::resolver::query qry(host, port);
+	asio::connect(_socket, rslv.resolve(qry));	
 
-	id_ = 2; //set to for testing, real id is assigned on login
+	_id = 1; // set for testing
+}
+
+void client::close()
+{
+	cout << "Connection closed."<< endl;
+	_socket.close();
+}
+
+void client::write_body(boost::system::error_code e, size_t, shared_ptr<string> msg)
+{
+	if (!e)
+	{
+		asio::write(_socket, asio::buffer(*msg, msg->length()));
+	}
+	else
+	{
+		close();
+	}
+}
+
+void client::login(const string& name)
+{
+	MazeCom loginMsg(MazeComType::LOGIN, 0);
+	loginMsg.LoginMessage(LoginMessageType(name));
+
+	send(loginMsg);
+	read_next();
+
+	_ios.run();
 }
 
 void client::send(const MazeCom& msg)
 {
 	stringstream serializationStream;
 	MazeCom_(serializationStream, msg);
-	string serializedMsg(serializationStream.str());
 
-	if (log.is_open())
-		log << "sent:\n" << serializedMsg << "\n";
+	shared_ptr<string> serializedMsg(new string(serializationStream.str()));
 
-	int msgLength = serializedMsg.length();
-	asio::write(socket_, asio::buffer(&msgLength, 4));
-	asio::write(socket_, boost::asio::buffer(serializedMsg, msgLength));
+	int msgLength = serializedMsg->length();
+	asio::async_write(_socket, asio::buffer(&msgLength, 4), boost::bind(&client::write_body, this, error, bytes_transferred, serializedMsg));
 }
 
-MazeCom_Ptr client::recv(MazeComType type)
+void client::read_next()
 {
-	char* buf = new char[4];
-	asio::read(socket_, asio::buffer(buf, 4));
+	shared_ptr<vector<char>> buf(new vector<char>(4, 0));
+	asio::async_read(_socket, asio::buffer(*buf, 4), boost::bind(&client::read_body, this,  error, bytes_transferred, buf));
+}
+
+void client::read_body(boost::system::error_code, size_t, shared_ptr<vector<char>> buf)
+{
 	int length = 0;
-	length = length | (buf[3] & 0xff);
+	length = length | ((*buf)[3] & 0xff);
 	length = length << 8;
-	length = length | (buf[2] & 0xff);
+	length = length | ((*buf)[2] & 0xff);
 	length = length << 8;
-	length = length | (buf[1] & 0xff);
+	length = length | ((*buf)[1] & 0xff);
 	length = length << 8;
-	length = length | (buf[0] & 0xff);
+	length = length | ((*buf)[0] & 0xff);
 
-	delete[] buf;
-	buf = new char[length];
+	buf->clear();
+	*buf = vector<char>(length);
 
-	asio::read(socket_, asio::buffer(buf, length));
-
-	stringstream ss;
-	for (int i = 0; i < length; ++i)
-	{
-		ss << buf[i];
-	}
-
-	delete[] buf;
-
-	if (log.is_open())
-	{
-		string dbg(ss.str());	
-		log << "recved:\n" << dbg << std::endl;
-	}
-
-	MazeCom_Ptr msg(MazeCom_(ss, xml_schema::flags::dont_validate));
-
-	if (msg->mcType() == type)
-	{
-		return msg;
-	} 
-	else
-	{
-		throw msg;
-	}
+	asio::async_read(_socket, asio::buffer(*buf), boost::bind(&client::handle_msg, this, error, bytes_transferred, buf));
 }
 
-void client::login(string& name)
+void client::handle_msg(boost::system::error_code, size_t, shared_ptr<vector<char>> buf)
 {
-	//send login
-	MazeCom loginMsg(MazeComType::LOGIN, 0);
-	loginMsg.LoginMessage(LoginMessageType(name));
-	send(loginMsg);
-
-	//wait for reply
-	MazeCom_Ptr r(client::recv(MazeComType::LOGINREPLY));
-	id_ = r->id();
-
-	stringstream logname("log");
-	logname << id_ << ".txt";
-	client::log.open(logname.str());
-}
-
-void client::play()
-{
-	while (true)
+	stringstream deserializationStream;
+	for (size_t i = 0; i < buf->size(); ++i)
 	{
-		MazeCom_Ptr moveRequest(recv(MazeComType::AWAITMOVE));
-	
-		//calculate move
-		AwaitMoveMessageType content = *moveRequest->AwaitMoveMessage();
-		MoveMessageType moveMsg(positionType(0,0), positionType(0,0), content.board().shiftCard());
-		find_next_move(content, moveMsg);
+		deserializationStream << (*buf)[i];
+	}
 
-		//boost::asio::deadline_timer t(io_service_, boost::posix_time::seconds(10));
-		//t.wait();
+	MazeCom_Ptr msg(MazeCom_(deserializationStream, xml_schema::flags::dont_validate));
 
-		//send move
-		MazeCom msg(MazeComType::MOVE, id_);
-		msg.MoveMessage(moveMsg);
-		send(msg);
+	switch (msg->mcType())
+	{
+	case MazeComType::AWAITMOVE:
+		{
+			MazeCom rply(MazeComType::MOVE, _id);
+			MoveMessageType moveMsg(positionType(0,1), positionType(0,0), msg->AwaitMoveMessage()->board().shiftCard());
 
-		//await reply, end
-		MazeCom_Ptr accept(recv(MazeComType::ACCEPT));
+			if (_accepted) 
+				find_next_move(*msg->AwaitMoveMessage(), moveMsg);
+			else 
+				default_move(*msg->AwaitMoveMessage(), moveMsg);
+
+			rply.MoveMessage(moveMsg);
+
+			send(rply);
+			read_next();
+			break;
+		}
+	case MazeComType::ACCEPT:
+		{
+			if (!msg->AcceptMessage()->accept())
+			{
+				_accepted = false;
+
+				cout << "Illegal move detected" << endl
+					<< "Reason: " << msg->AcceptMessage()->errorCode() << endl
+					<< "Check Log for details" << endl << endl;
+			}
+			else
+			{
+				_accepted = true;
+			}
+
+			read_next();			
+			break;
+		}
+	case MazeComType::WIN:
+		{
+			cout << "Game has ended" << endl
+				<< "Winner: " << msg->WinMessage()->winner() << endl << endl;
+			close();
+			break;
+		}
+	case MazeComType::LOGINREPLY:
+		{
+			_id = msg->LoginReplyMessage()->newID();
+			cout << "Login successful." << endl;
+			cout << "ID: " << _id << endl;
+			cout << "Playing, don't close this window." << endl << endl;
+			read_next();
+			break;
+		}
+	case MazeComType::DISCONNECT:
+		{
+			cout << "Disconnected by server." << endl
+				<< "Reason: " << msg->DisconnectMessage()->erroCode() << endl << endl;
+			close();
+			break;
+		}
+	default:
+		{
+			cout << "Unexpected Message." << endl << endl;
+			close();
+			break;
+		}
 	}
 }
 
 int client::id() const
 {
-	return id_;
+	return _id;
 }
 
 void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessageType& moveMsg) 
@@ -177,7 +220,7 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 		}
 	}
 
-	Coord playerPos = board.find_player(id_);
+	Coord playerPos = board.find_player(_id);
 
 	int minFreedom = INT_MAX; //minimum possible movement of opponents for each move you make
 
@@ -187,7 +230,7 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 	for (size_t i = 0; i < possibleBoards.size(); ++i)
 	{		
 		vector<Coord> possiblePositions;
-		possibleBoards[i]->expand_positions(id_, possiblePositions);
+		possibleBoards[i]->expand_positions(_id, possiblePositions);
 
 		//check all reachable positions for target
 		bool canReachTreasure = false;
@@ -242,14 +285,14 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 	for (size_t i = 0; i < possibleBoards.size(); ++i)
 	{
 		vector<Coord> positions;
-		possibleBoards[i]->expand_positions(id_, positions);
+		possibleBoards[i]->expand_positions(_id, positions);
 
 		for (size_t j = 0; j < positions.size(); ++j)
 		{
 			Board::ptr copy(new Board(*possibleBoards[i]));
 
-			copy->card_at(playerPos)._op[id_ - 1] = false; 
-			copy->card_at(positions[j])._op[id_ - 1] = true;
+			copy->card_at(playerPos)._op[_id - 1] = false; 
+			copy->card_at(positions[j])._op[_id - 1] = true;
 
 			possibleBoardsAndPositions.push_back(copy);
 		}
@@ -261,7 +304,7 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 		possibleBoardsAndPositions.end(), 
 		[this, treasure] (Board::ptr& a, Board::ptr& b) -> bool 
 		{
-			return this->distance(*a, id_, treasure) < this->distance(*b, id_, treasure);
+			return this->distance(*a, _id, treasure) < this->distance(*b, _id, treasure);
 		});
 
 	double begin = omp_get_wtime();
@@ -282,7 +325,7 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 			//moves by opponents
 			for (int j = 1; j <= 4; ++j)
 			{
-				if (j == id_ || treasuresToGo[j] < 0) //dont do move for opponents that are not playing and not for the player himself
+				if (j == _id || treasuresToGo[j] < 0) //dont do move for opponents that are not playing and not for the player himself
 				{
 					continue;
 				}
@@ -312,7 +355,7 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 
 				for (size_t j = 0; j < expand_own_move.size(); ++j)
 				{
-					int distanceFromTreasure = expand_own_move[j]->can_reach(id_, treasure);
+					int distanceFromTreasure = expand_own_move[j]->can_reach(_id, treasure);
 
 					if (distanceFromTreasure < minDistance)
 					{
@@ -345,16 +388,34 @@ void client::find_next_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessag
 					solution.shiftCard._op[P2] = false; //but cards with pins as shift card are not accepted
 					solution.shiftCard._op[P3] = false;
 					solution.shiftCard._op[P4] = false;
-					solution.pinPos = possibleBoardsAndPositions[i]->find_player(id_);			
+					solution.pinPos = possibleBoardsAndPositions[i]->find_player(_id);			
 				}
 			}
 		}
 	}
 
-	cout << "max Ratio:" << maxRatio << endl;
-	cout << "min avg dist: " << minAvgDistance << endl << endl;
-
 	//fill move message
+	moveMsg.shiftPosition() = positionType(solution.shiftPos.row, solution.shiftPos.col);
+	moveMsg.newPinPos() = positionType(solution.pinPos.row, solution.pinPos.col);
+	moveMsg.shiftCard() = (cardType)solution.shiftCard;
+}
+
+void client::default_move(const AwaitMoveMessageType& awaitMoveMsg, MoveMessageType& moveMsg)
+{
+	struct solution
+	{
+		Coord pinPos, shiftPos;
+		Card shiftCard;
+	} solution;
+	
+	Board b(awaitMoveMsg.board());
+
+	//shift opposite of forbidden, without rotation, don't move pin (except if shifted)
+	solution.shiftPos = b._forbidden.opposite();
+	solution.shiftCard = b._shift;
+	b.shift(solution.shiftPos, solution.shiftCard);
+	solution.pinPos = b.find_player(_id);
+
 	moveMsg.shiftPosition() = positionType(solution.shiftPos.row, solution.shiftPos.col);
 	moveMsg.newPinPos() = positionType(solution.pinPos.row, solution.pinPos.col);
 	moveMsg.shiftCard() = (cardType)solution.shiftCard;
@@ -378,7 +439,7 @@ int client::count_freedom_opponents(const Board& board, const vector<int>& treas
 	int sumTreasures = 1; //sum one greater than actual sum so result is not always zero with one opponent
 	for (size_t id = 1; id <= 4; id++)
 	{
-		if (id != id_ && treasuresToGo[id] >= 0)
+		if (id != _id && treasuresToGo[id] >= 0)
 		{
 			sumTreasures += treasuresToGo[id];
 		}
@@ -391,7 +452,7 @@ int client::count_freedom_opponents(const Board& board, const vector<int>& treas
 	//weigh by treasures to go
 	for (size_t id = 1; id <= 4; id++)
 	{
-		if (id == id_ || treasuresToGo[id] < 0) continue;
+		if (id == _id || treasuresToGo[id] < 0) continue;
 
 		vector<Coord> positions;
 		board.expand_positions(id, positions);

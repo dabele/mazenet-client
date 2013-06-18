@@ -40,7 +40,7 @@ int main(int argc, char** argv)
 		//debug
 		host = "localhost";
 		port = "5123";
-	}	
+	}
 
 	try
 	{
@@ -51,7 +51,6 @@ int main(int argc, char** argv)
 		cout << "enter name:" << endl;
 		cin >> name;
 		c.login(name);
-		c.play();
 		
 		//test the algorithm with a presaved board
 		/*std::ifstream ifs("board.txt");
@@ -73,34 +72,7 @@ int main(int argc, char** argv)
 		cout << "(" << moveMsg.newPinPos().row() << "," << moveMsg.newPinPos().col() << ")" << endl;*/
 		
 	}
-	catch (MazeCom_Ptr& unexpected) //thrown if problems during game
-	{
-		switch ((MazeComType::value)unexpected->mcType())
-		{
-		case MazeComType::WIN:
-			cout << "winner:" << unexpected->WinMessage()->winner() << endl;
-			break;
-		case MazeComType::DISCONNECT:
-			cout << "disconnected:";
-			switch (unexpected->DisconnectMessage()->erroCode())
-			{
-			case ErrorType::TOO_MANY_TRIES:
-				cout << "too many tries" << endl;
-				break;
-			default:
-				cout << "unknown reason" << endl;
-				break;
-			}
-			break;
-		default:
-			cout << "unexpected message" << endl;
-		}
-	} 
 	catch (boost::system::system_error& e) //thrown if connection problems
-	{
-		cout << e.what() << endl;
-	}
-	catch (runtime_error& e)
 	{
 		cout << e.what() << endl;
 	}

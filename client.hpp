@@ -25,14 +25,16 @@ using boost::asio::ip::tcp;
 typedef std::auto_ptr<MazeCom> MazeCom_Ptr;
 
 class client 
-{	
+{
 public:
 	//log for messages, only works after login
 	static std::ofstream log;
+
 private:
-	io_service io_service_;
-	tcp::socket socket_;
-	MazeCom::id_type id_;
+	io_service _ios;
+	tcp::socket _socket;
+	MazeCom::id_type _id;
+	bool _accepted;
 
 public:
 	int id() const;
@@ -40,18 +42,21 @@ public:
 	//ctor, connects to server
 	client(const string& ip, const string& port);
 
-	//blocking send
-	void send(const MazeCom& msg);
-	//blocking receive, returns msg if type fits, throws msg if type doesn't fit
-	MazeCom_Ptr recv(MazeComType type);
-
-	void login(string& name);
-	void play();
 	void find_next_move(const AwaitMoveMessageType&, MoveMessageType&);
+	void default_move(const AwaitMoveMessageType&, MoveMessageType&);
 	//distance of player with id to card with treasure t
 	int distance(const Board& board, int id, Treasure t);
 	//weighted possible movement of all opponents, used for determining quality of moves
 	int count_freedom_opponents(const Board&, const vector<int>&);
+
+	void write_body(boost::system::error_code e, size_t, shared_ptr<string> msg);
+	void close();
+	void login(const string&);
+	void send(const MazeCom&);
+	void start_recv();
+	void read_next();
+	void read_body(boost::system::error_code, size_t, shared_ptr<vector<char>>);
+	void handle_msg(boost::system::error_code, size_t, shared_ptr<vector<char>>);
 };
 
 
